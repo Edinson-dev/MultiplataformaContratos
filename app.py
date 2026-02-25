@@ -17,7 +17,7 @@ app.secret_key = "datacleanse-secret-2024"
 # USUARIOS INVITADOS  →  agrega o quita usuarios aquí
 # ============================================================
 USUARIOS = {
-    "admin":    generate_password_hash("admin123"),
+    "Prueba":    generate_password_hash("Prueba123"),
     "usuario1": generate_password_hash("clave123"),
     "usuario2": generate_password_hash("clave456"),
 }
