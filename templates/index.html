@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DataCleanse Pro</title>
+<title>Savia Salud Eps</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -228,9 +228,9 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
 <!-- TOPBAR -->
 <header class="topbar">
   <div class="tb-mark"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
-  <div class="tb-brand">DataCleanse<span>Pro</span></div>
+  <div class="tb-brand">Savia Salud Eps<span>Contratos</span></div>
   <div class="tb-pipe"></div>
-  <div class="tb-mod">Módulo de Eliminación de Duplicados</div>
+  <div class="tb-mod">Módulo de Eliminación de Duplicados Contratos</div>
   <div class="tb-right">
     <span class="tb-badge purple">ENTERPRISE</span>
     <div class="tb-user">
@@ -563,11 +563,11 @@ function renderResults(res){
     h+=`<div class="dl-banner">
       <div class="dl-banner-txt">
         <div class="dl-title">🎉 ¡Proceso completado!</div>
-        <div class="dl-sub">${ok.length} archivo(s) procesados · ${te.toLocaleString()} duplicados eliminados · Descarga cada archivo desde su tarjeta</div>
+        <div class="dl-sub">${ok.length} archivo(s) procesados · ${te.toLocaleString()} duplicados eliminados</div>
       </div>
       <div class="dl-btns" style="flex-wrap:wrap;gap:6px;">
-        <button class="btn btn-green btn-sm" onclick="abrirCarpeta('limpios')">📂 Abrir Sin Duplicados</button>
-        <button class="btn btn-outline btn-sm" onclick="abrirCarpeta('duplicados')">📂 Abrir Duplicados</button>
+        <button class="btn btn-purple btn-sm" onclick="descargarZip('limpios')">⬇️ ZIP Sin Duplicados</button>
+        <button class="btn btn-red btn-sm" onclick="descargarZip('duplicados')">⬇️ ZIP Duplicados</button>
       </div>
     </div>`;
 
@@ -589,10 +589,6 @@ function renderResults(res){
           <div class="rs"><div class="rs-v g">${r.filas_resultado.toLocaleString()}</div><div class="rs-l">Sin Duplic.</div></div>
         </div>
         ${r.guardado_duplicados?'<div class="rc-path dup">🗑️ Duplicados guardados separadamente</div>':'<div class="rc-path" style="color:#10b981;background:#f0fdf4;border-color:#bbf7d0">✅ Sin duplicados encontrados</div>'}
-        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
-          <button class="btn btn-purple btn-sm" onclick="descargarArchivo('limpios','${r.nombre_limpio}')">⬇️ Descargar limpio</button>
-          ${r.guardado_duplicados?`<button class="btn btn-red btn-sm" onclick="descargarArchivo('duplicados','${r.nombre_duplicados}')">⬇️ Descargar duplicados</button>`:''}
-        </div>
       </div>`;
     } else {
       h+=`<div class="rc err" style="animation-delay:${.1+i*.08}s">

@@ -256,32 +256,32 @@ def procesar():
 @app.route("/api/descargar", methods=["POST"])
 @login_required
 def descargar():
-    """Descarga directa del archivo .xlsx sin ZIP."""
-    data    = request.json
-    tipo    = data.get("tipo", "limpios")       # 'limpios' o 'duplicados'
-    archivo = data.get("archivo")               # nombre del archivo .xlsx
-    carpeta = carpeta_usuario(session["usuario"])
+    """Descarga la carpeta de resultados como ZIP."""
+    import zipfile, io
+    data       = request.json
+    tipo       = data.get("tipo", "limpios")
+    carpeta    = carpeta_usuario(session["usuario"])
+    subcarpeta = os.path.join(carpeta, "Sin Duplicados" if tipo == "limpios" else "Duplicados")
 
-    if tipo == "limpios":
-        ruta = os.path.join(carpeta, "Sin Duplicados", archivo)
-    else:
-        # Buscar dentro de subcarpetas de contrato
-        ruta = None
-        base = os.path.join(carpeta, "Duplicados")
-        for root, _, files in os.walk(base):
-            if archivo in files:
-                ruta = os.path.join(root, archivo)
-                break
+    if not os.path.isdir(subcarpeta):
+        return jsonify({"error": "No hay archivos procesados aún"}), 404
 
-    if not ruta or not os.path.isfile(ruta):
-        return jsonify({"error": "Archivo no encontrado"}), 404
+    hay_archivos = any(files for _, _, files in os.walk(subcarpeta))
+    if not hay_archivos:
+        return jsonify({"error": "La carpeta está vacía"}), 404
 
-    return send_file(
-        ruta,
-        as_attachment=True,
-        download_name=archivo,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, _, files in os.walk(subcarpeta):
+            for fname in files:
+                full    = os.path.join(root, fname)
+                arcname = os.path.relpath(full, subcarpeta)
+                zf.write(full, arcname)
+    buf.seek(0)
+
+    nombre_zip = f"{session['usuario']}_{tipo}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    return send_file(buf, as_attachment=True, download_name=nombre_zip,
+                     mimetype="application/zip")
 
 
 @app.route("/api/abrir-carpeta", methods=["POST"])
