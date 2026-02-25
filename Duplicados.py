@@ -17,7 +17,7 @@ app.secret_key = "datacleanse-secret-2024"
 # USUARIOS INVITADOS  →  agrega o quita usuarios aquí
 # ============================================================
 USUARIOS = {
-    "Prueba":    generate_password_hash("Prueba123"),
+    "admin":    generate_password_hash("admin123"),
     "usuario1": generate_password_hash("clave123"),
     "usuario2": generate_password_hash("clave456"),
 }
@@ -166,11 +166,18 @@ def procesar():
     if not archivos:
         return jsonify({"error": "No se seleccionaron archivos"}), 400
 
-    # ── Crear carpetas de salida automáticamente ──────────
+    # ── Crear y limpiar carpetas de salida ───────────────
     carpeta_limpios    = os.path.join(carpeta, "Sin Duplicados")
     carpeta_duplicados = os.path.join(carpeta, "Duplicados")
     os.makedirs(carpeta_limpios,    exist_ok=True)
     os.makedirs(carpeta_duplicados, exist_ok=True)
+
+    # Limpiar archivos anteriores para que el ZIP solo tenga el proceso actual
+    for f in glob.glob(os.path.join(carpeta_limpios, "*.xlsx")):
+        os.remove(f)
+    for root, dirs, files in os.walk(carpeta_duplicados):
+        for f in files:
+            os.remove(os.path.join(root, f))
 
     resultados = []
 
@@ -217,6 +224,8 @@ def procesar():
                     "filas_resultado":       len(df_limpio),
                     "guardado_limpio":       ruta_limpio,
                     "guardado_duplicados":   ruta_dup,
+                    "nombre_limpio":         os.path.basename(ruta_limpio),
+                    "nombre_duplicados":     os.path.basename(ruta_dup) if ruta_dup else None,
                     "carpeta_limpios":       carpeta_limpios,
                     "carpeta_duplicados":    carpeta_duplicados
                 })
@@ -238,19 +247,36 @@ def procesar():
 @app.route("/api/descargar", methods=["POST"])
 @login_required
 def descargar():
-    """Empaqueta los resultados del usuario en ZIP para descargar."""
+    """Descarga un archivo específico o toda la carpeta como ZIP."""
     data       = request.json
     tipo       = data.get("tipo", "limpios")
+    archivo    = data.get("archivo", None)   # nombre específico opcional
     carpeta    = carpeta_usuario(session["usuario"])
     subcarpeta = os.path.join(carpeta, "Sin Duplicados" if tipo == "limpios" else "Duplicados")
 
     if not os.path.isdir(subcarpeta):
         return jsonify({"error": "No hay archivos procesados aún"}), 404
 
-    # Verificar que haya archivos dentro
-    hay_archivos = any(
-        files for _, _, files in os.walk(subcarpeta)
-    )
+    # ── Descarga de archivo específico ──────────────────
+    if archivo:
+        if tipo == "limpios":
+            ruta_archivo = os.path.join(subcarpeta, archivo)
+        else:
+            # En duplicados buscar dentro de subcarpetas de contrato
+            ruta_archivo = None
+            for root, _, files in os.walk(subcarpeta):
+                for f in files:
+                    if f == archivo:
+                        ruta_archivo = os.path.join(root, f)
+                        break
+
+        if ruta_archivo and os.path.isfile(ruta_archivo):
+            return send_file(ruta_archivo, as_attachment=True,
+                             download_name=archivo, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        return jsonify({"error": "Archivo no encontrado"}), 404
+
+    # ── Descarga de toda la carpeta como ZIP ────────────
+    hay_archivos = any(files for _, _, files in os.walk(subcarpeta))
     if not hay_archivos:
         return jsonify({"error": "La carpeta está vacía"}), 404
 
@@ -271,7 +297,7 @@ def descargar():
 @app.route("/api/abrir-carpeta", methods=["POST"])
 @login_required
 def abrir_carpeta():
-    """Solo funciona en versión local — abre carpeta en el explorador."""
+    """Abre carpeta en el explorador — solo funciona en versión local."""
     data    = request.json
     tipo    = data.get("tipo", "limpios")
     carpeta = carpeta_usuario(session["usuario"])
@@ -279,20 +305,24 @@ def abrir_carpeta():
 
     if not os.path.isdir(subcarpeta):
         return jsonify({"error": "Carpeta no encontrada"}), 404
+
+    sistema = platform.system()
+
+    # En Railway u otro servidor Linux sin display → no se puede abrir explorador
+    if sistema == "Linux" and not os.environ.get("DISPLAY"):
+        return jsonify({"local": False, "ruta": subcarpeta}), 200
+
     try:
-        sistema = platform.system()
         if sistema == "Windows":
             subprocess.Popen(["explorer", subcarpeta])
         elif sistema == "Darwin":
             subprocess.Popen(["open", subcarpeta])
         else:
             subprocess.Popen(["xdg-open", subcarpeta])
-        return jsonify({"ok": True})
+        return jsonify({"ok": True, "local": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"local": False, "ruta": subcarpeta}), 200
 
-
-import os
 
 if __name__ == "__main__":
     print("\n" + "="*55)
