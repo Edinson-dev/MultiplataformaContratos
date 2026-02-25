@@ -1,6 +1,6 @@
 """
 app.py - DataCleanse Pro · Enterprise
-Versión web con login, carpetas por usuario y descarga de resultados
+Versión híbrida: crea carpetas locales + permite descarga ZIP
 """
 
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, send_file
@@ -11,13 +11,13 @@ from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = "datacleanse-secret-2024"   # Cambia esto por una clave segura
+app.secret_key = "datacleanse-secret-2024"
 
 # ============================================================
 # USUARIOS INVITADOS  →  agrega o quita usuarios aquí
 # ============================================================
 USUARIOS = {
-    "Prueba":   generate_password_hash("Prueba123"),
+    "admin":    generate_password_hash("admin123"),
     "usuario1": generate_password_hash("clave123"),
     "usuario2": generate_password_hash("clave456"),
 }
@@ -32,7 +32,6 @@ BASE_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "user_data")
 
 
 def carpeta_usuario(username):
-    """Devuelve (y crea si no existe) la carpeta privada del usuario."""
     path = os.path.join(BASE_UPLOAD_DIR, username)
     os.makedirs(path, exist_ok=True)
     return path
@@ -94,7 +93,7 @@ def separar_duplicados(df):
 
 
 # ═══════════════════════════════════════════════════════════
-# RUTAS AUTH
+# AUTH
 # ═══════════════════════════════════════════════════════════
 
 @app.route("/login", methods=["GET", "POST"])
@@ -117,7 +116,7 @@ def logout():
 
 
 # ═══════════════════════════════════════════════════════════
-# RUTAS PRINCIPALES
+# PRINCIPALES
 # ═══════════════════════════════════════════════════════════
 
 @app.route("/")
@@ -167,6 +166,7 @@ def procesar():
     if not archivos:
         return jsonify({"error": "No se seleccionaron archivos"}), 400
 
+    # ── Crear carpetas de salida automáticamente ──────────
     carpeta_limpios    = os.path.join(carpeta, "Sin Duplicados")
     carpeta_duplicados = os.path.join(carpeta, "Duplicados")
     os.makedirs(carpeta_limpios,    exist_ok=True)
@@ -194,9 +194,11 @@ def procesar():
             else:
                 df_limpio, df_duplicados = separar_duplicados(df)
 
+                # Guardar archivo limpio → Sin Duplicados/
                 ruta_limpio = os.path.join(carpeta_limpios, f"{nombre_base}.xlsx")
                 guardar_excel(df_limpio, ruta_limpio, contrato)
 
+                # Guardar duplicados → Duplicados/{contrato}/
                 ruta_dup = None
                 if len(df_duplicados) > 0:
                     carpeta_contrato = os.path.join(carpeta_duplicados, contrato)
@@ -214,7 +216,9 @@ def procesar():
                     "duplicados_eliminados": len(df_duplicados),
                     "filas_resultado":       len(df_limpio),
                     "guardado_limpio":       ruta_limpio,
-                    "guardado_duplicados":   ruta_dup
+                    "guardado_duplicados":   ruta_dup,
+                    "carpeta_limpios":       carpeta_limpios,
+                    "carpeta_duplicados":    carpeta_duplicados
                 })
                 continue
 
@@ -234,20 +238,27 @@ def procesar():
 @app.route("/api/descargar", methods=["POST"])
 @login_required
 def descargar():
-    """Empaqueta todos los resultados del usuario en un ZIP para descargar."""
-    data  = request.json
-    tipo  = data.get("tipo", "limpios")   # 'limpios' o 'duplicados'
-    carpeta = carpeta_usuario(session["usuario"])
+    """Empaqueta los resultados del usuario en ZIP para descargar."""
+    data       = request.json
+    tipo       = data.get("tipo", "limpios")
+    carpeta    = carpeta_usuario(session["usuario"])
     subcarpeta = os.path.join(carpeta, "Sin Duplicados" if tipo == "limpios" else "Duplicados")
 
     if not os.path.isdir(subcarpeta):
         return jsonify({"error": "No hay archivos procesados aún"}), 404
 
+    # Verificar que haya archivos dentro
+    hay_archivos = any(
+        files for _, _, files in os.walk(subcarpeta)
+    )
+    if not hay_archivos:
+        return jsonify({"error": "La carpeta está vacía"}), 404
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, _, files in os.walk(subcarpeta):
             for fname in files:
-                full = os.path.join(root, fname)
+                full    = os.path.join(root, fname)
                 arcname = os.path.relpath(full, subcarpeta)
                 zf.write(full, arcname)
     buf.seek(0)
@@ -255,6 +266,30 @@ def descargar():
     nombre_zip = f"{session['usuario']}_{tipo}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
     return send_file(buf, as_attachment=True, download_name=nombre_zip,
                      mimetype="application/zip")
+
+
+@app.route("/api/abrir-carpeta", methods=["POST"])
+@login_required
+def abrir_carpeta():
+    """Solo funciona en versión local — abre carpeta en el explorador."""
+    data    = request.json
+    tipo    = data.get("tipo", "limpios")
+    carpeta = carpeta_usuario(session["usuario"])
+    subcarpeta = os.path.join(carpeta, "Sin Duplicados" if tipo == "limpios" else "Duplicados")
+
+    if not os.path.isdir(subcarpeta):
+        return jsonify({"error": "Carpeta no encontrada"}), 404
+    try:
+        sistema = platform.system()
+        if sistema == "Windows":
+            subprocess.Popen(["explorer", subcarpeta])
+        elif sistema == "Darwin":
+            subprocess.Popen(["open", subcarpeta])
+        else:
+            subprocess.Popen(["xdg-open", subcarpeta])
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 import os
