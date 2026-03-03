@@ -12,6 +12,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "datacleanse-secret-2024"
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
+
 
 # ============================================================
 # USUARIOS INVITADOS  →  agrega o quita usuarios aquí
