@@ -402,6 +402,8 @@ async function processDroppedFiles(dropped){
   if(!valid.length){toast('No se encontraron archivos válidos','error',4000);return;}
   const dz=document.getElementById('drop-zone');
   dz.innerHTML='<span class="dz-icon">⏳</span><div class="dz-title">Subiendo '+valid.length+' archivo(s)...</div>';
+  toast('⏳ Subiendo archivo pesado, puede tardar unos segundos...','success',8000);
+
   const formData=new FormData();
   valid.forEach(f=>formData.append('archivos',f));
   try{
