@@ -75,22 +75,32 @@ def leer_archivo(ruta):
     if ext in [".xlsx", ".xls", ".xlsm"]:
         return pd.read_excel(ruta)
 
-    # Detectar separador automáticamente (coma, pipe, punto y coma, tab)
-    df_prueba = pd.read_csv(ruta, nrows=5, header=None, encoding="utf-8-sig")
-    muestra = df_prueba.to_string()
+    # Detectar codificación automáticamente
+    encodings = ["utf-8-sig", "latin-1", "iso-8859-1", "cp1252"]
 
-    if df_prueba.shape[1] == 1:
-        # Solo una columna detectada — revisar si tiene | o ;
-        primera_linea = df_prueba.iloc[0, 0] if len(df_prueba) > 0 else ""
-        if '|' in str(primera_linea):
-            return pd.read_csv(ruta, sep='|', encoding="utf-8-sig", low_memory=False)
-        elif ';' in str(primera_linea):
-            return pd.read_csv(ruta, sep=';', encoding="utf-8-sig", low_memory=False)
-        else:
-            return pd.read_csv(ruta, sep=",", encoding="utf-8-sig", low_memory=False)
+    for encoding in encodings:
+        try:
+            # Leer muestra para detectar separador
+            df_prueba = pd.read_csv(ruta, nrows=5, header=None, encoding=encoding)
 
-    # Múltiples columnas detectadas — usar detección automática
-    return pd.read_csv(ruta, sep=None, engine="python", encoding="utf-8-sig")
+            if df_prueba.shape[1] == 1:
+                # Solo una columna — detectar separador manualmente
+                primera_linea = str(df_prueba.iloc[0, 0]) if len(df_prueba) > 0 else ""
+                if '|' in primera_linea:
+                    return pd.read_csv(ruta, sep='|', encoding=encoding, low_memory=False)
+                elif ';' in primera_linea:
+                    return pd.read_csv(ruta, sep=';', encoding=encoding, low_memory=False)
+                else:
+                    return pd.read_csv(ruta, sep=',', encoding=encoding, low_memory=False)
+            else:
+                # Múltiples columnas — detección automática
+                return pd.read_csv(ruta, sep=None, engine="python", encoding=encoding)
+
+        except (UnicodeDecodeError, Exception):
+            continue
+
+    # Si ninguna funcionó, forzar latin-1 que acepta cualquier byte
+    return pd.read_csv(ruta, sep=None, engine="python", encoding="latin-1")
 
 
 def guardar_excel(df, ruta, nombre_hoja):
