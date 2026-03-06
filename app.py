@@ -12,9 +12,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "datacleanse-secret-2024"
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
-
 
 # ============================================================
 # USUARIOS INVITADOS  →  agrega o quita usuarios aquí
@@ -35,6 +32,54 @@ EXTENSIONES     = ["*.csv", "*.txt", "*.xlsx", "*.xls", "*.xlsm"]
 ES_RAILWAY = os.environ.get("RAILWAY_ENVIRONMENT") is not None
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 # ============================================================
+# ESTRUCTURA FINAL (columnas en orden)
+ESTRUCTURA_FINAL = [
+    "numero_radicado", "nit", "ips", "numero_contrato",
+    "numero_facturado", "valor_factura", "valor_inicial_glosa",
+    "valor_pendiente", "valor_pagado_factura", "valor_copago",
+    "valor_aceptado_ips", "valor_pagado_eps", "mae_tipo_contrato_valor",
+    "fecha_radicacion", "fecha_proceso_radicacion",
+    "fecha_prestacion", "estado_factura"
+]
+
+# Mapeo de columnas: nombre alternativo → nombre estándar
+MAPEO_COLUMNAS = {
+    "valor_pendiente_actual":  "valor_pendiente",
+    "valor_aceptado_eps":      "valor_pagado_eps",
+    # Agrega más mapeos aquí si aparecen nuevas estructuras
+}
+
+# Columnas a ignorar al unificar
+COLUMNAS_IGNORAR = {"naturaleza_juridica"}
+# ============================================================
+
+
+def normalizar_columnas(df):
+    """Renombra columnas según el mapeo y descarta las que no pertenecen."""
+    # Renombrar columnas mapeadas
+    df = df.rename(columns=MAPEO_COLUMNAS)
+    # Eliminar columnas ignoradas
+    cols_ignorar = [c for c in df.columns if c in COLUMNAS_IGNORAR]
+    if cols_ignorar:
+        df = df.drop(columns=cols_ignorar)
+    # Agregar columnas faltantes como vacías
+    for col in ESTRUCTURA_FINAL:
+        if col not in df.columns:
+            df[col] = None
+    # Reordenar según estructura final
+    df = df[ESTRUCTURA_FINAL]
+    return df
+
+
+def unificar_archivos(rutas):
+    """Lee múltiples archivos, normaliza columnas y los unifica en uno solo."""
+    frames = []
+    for ruta in rutas:
+        df = leer_archivo(ruta)
+        df = limpiar_nombres_columnas(df)
+        df = normalizar_columnas(df)
+        frames.append(df)
+    return pd.concat(frames, ignore_index=True)
 
 
 def carpeta_usuario(username):
@@ -74,33 +119,10 @@ def leer_archivo(ruta):
     ext = ext.lower()
     if ext in [".xlsx", ".xls", ".xlsm"]:
         return pd.read_excel(ruta)
-
-    # Detectar codificación automáticamente
-    encodings = ["utf-8-sig", "latin-1", "iso-8859-1", "cp1252"]
-
-    for encoding in encodings:
-        try:
-            # Leer muestra para detectar separador
-            df_prueba = pd.read_csv(ruta, nrows=5, header=None, encoding=encoding)
-
-            if df_prueba.shape[1] == 1:
-                # Solo una columna — detectar separador manualmente
-                primera_linea = str(df_prueba.iloc[0, 0]) if len(df_prueba) > 0 else ""
-                if '|' in primera_linea:
-                    return pd.read_csv(ruta, sep='|', encoding=encoding, low_memory=False)
-                elif ';' in primera_linea:
-                    return pd.read_csv(ruta, sep=';', encoding=encoding, low_memory=False)
-                else:
-                    return pd.read_csv(ruta, sep=',', encoding=encoding, low_memory=False)
-            else:
-                # Múltiples columnas — detección automática
-                return pd.read_csv(ruta, sep=None, engine="python", encoding=encoding)
-
-        except (UnicodeDecodeError, Exception):
-            continue
-
-    # Si ninguna funcionó, forzar latin-1 que acepta cualquier byte
-    return pd.read_csv(ruta, sep=None, engine="python", encoding="latin-1")
+    df_prueba = pd.read_csv(ruta, nrows=2, header=None, encoding="utf-8-sig")
+    if df_prueba.shape[1] == 1:
+        return pd.read_csv(ruta, sep=",", encoding="utf-8-sig", low_memory=False)
+    return pd.read_csv(ruta, sep=None, engine="python", encoding="utf-8-sig")
 
 
 def guardar_excel(df, ruta, nombre_hoja):
@@ -286,6 +308,77 @@ def procesar():
         "carpeta_limpios":    carpeta_limpios,
         "carpeta_duplicados": carpeta_duplicados
     })
+
+
+@app.route("/api/unificar", methods=["POST"])
+@login_required
+def unificar():
+    """Unifica múltiples archivos en la estructura estándar y elimina duplicados."""
+    carpeta  = carpeta_usuario(session["usuario"])
+    data     = request.json
+    archivos = data.get("archivos", [])
+
+    if len(archivos) < 2:
+        return jsonify({"error": "Selecciona al menos 2 archivos para unificar"}), 400
+
+    # Carpetas de salida
+    carpeta_limpios    = os.path.join(carpeta, "Sin Duplicados")
+    carpeta_duplicados = os.path.join(carpeta, "Duplicados")
+    os.makedirs(carpeta_limpios,    exist_ok=True)
+    os.makedirs(carpeta_duplicados, exist_ok=True)
+
+    # Limpiar archivos anteriores
+    for f in glob.glob(os.path.join(carpeta_limpios, "*.xlsx")):
+        os.remove(f)
+    for root, dirs, files in os.walk(carpeta_duplicados):
+        for f in files:
+            os.remove(os.path.join(root, f))
+
+    try:
+        # 1. Unificar todos los archivos en estructura estándar
+        df_unificado = unificar_archivos(archivos)
+        filas_orig   = len(df_unificado)
+
+        # 2. Validar columnas requeridas
+        for col in [COLUMNA_FACTURA, COLUMNA_FECHA]:
+            if col not in df_unificado.columns:
+                return jsonify({"error": f"No se encontró la columna '{col}' en los archivos unificados"}), 400
+
+        # 3. Separar duplicados
+        df_limpio, df_duplicados = separar_duplicados(df_unificado)
+
+        # 4. Guardar archivo unificado limpio
+        nombre_base = f"unificado_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        ruta_limpio = os.path.join(carpeta_limpios, f"{nombre_base}.xlsx")
+        guardar_excel(df_limpio, ruta_limpio, "Unificado")
+
+        # 5. Guardar duplicados si hay
+        ruta_dup = None
+        if len(df_duplicados) > 0:
+            carpeta_dup = os.path.join(carpeta_duplicados, "unificado")
+            os.makedirs(carpeta_dup, exist_ok=True)
+            ruta_dup = os.path.join(carpeta_dup, f"{nombre_base}_duplicados.xlsx")
+            guardar_excel(df_duplicados, ruta_dup, "Duplicados")
+
+        # 6. Eliminar archivos originales
+        for ruta in archivos:
+            if os.path.isfile(ruta):
+                os.remove(ruta)
+
+        return jsonify({
+            "estado":                "ok",
+            "archivos_unificados":   len(archivos),
+            "filas_totales":         filas_orig,
+            "duplicados_eliminados": len(df_duplicados),
+            "filas_resultado":       len(df_limpio),
+            "nombre_limpio":         f"{nombre_base}.xlsx",
+            "nombre_dup":            f"{nombre_base}_duplicados.xlsx" if ruta_dup else None,
+            "carpeta_limpios":       carpeta_limpios,
+            "carpeta_duplicados":    carpeta_duplicados
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e) + "\n" + traceback.format_exc()}), 500
 
 
 @app.route("/api/descargar", methods=["POST"])

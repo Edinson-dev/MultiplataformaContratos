@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Savia Salud Eps</title>
+<title>DataCleanse Pro</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -106,6 +106,10 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
 .fi.sel .fname{color:#1a4a5c;font-weight:600}
 .empty-ph{text-align:center;padding:28px 16px;border:1.5px dashed #e2e8f0;border-radius:8px;color:#94a3b8;font-size:11px;background:#fafafa}
 .empty-ico{font-size:24px;margin-bottom:8px;opacity:.4}
+.mode-toggle{display:flex;gap:6px;background:#f0f4f8;border-radius:8px;padding:4px;margin-bottom:12px}
+.mode-btn{flex:1;padding:7px 10px;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;background:transparent;color:#94a3b8;font-family:'Inter',sans-serif}
+.mode-btn.active{background:#fff;color:#00b398;box-shadow:0 1px 4px #0000001a}
+.unif-badge{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:#e8faf8;color:#00b398;border:1px solid #b2e8e0;margin-bottom:8px}
 
 /* ── BUTTONS ── */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:7px;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
@@ -228,11 +232,11 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
 <!-- TOPBAR -->
 <header class="topbar">
   <div class="tb-mark"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
-  <div class="tb-brand">Duplicados <span>Contrato</span></div>
+  <div class="tb-brand">Savia<span>EPS</span></div>
   <div class="tb-pipe"></div>
-  <div class="tb-mod">Módulo de Eliminación de Duplicados Contratos </div>
+  <div class="tb-mod">Módulo de Eliminación de Duplicados</div>
   <div class="tb-right">
-    <span class="tb-badge purple">PERSONAL</span>
+    <span class="tb-badge purple">ENTERPRISE</span>
     <div class="tb-user">
       <div class="tb-avatar">{{ usuario[0]|upper }}</div>
       <span class="tb-username">{{ usuario }}</span>
@@ -299,9 +303,9 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
 
     </div>
     <div class="lp-ft">
-      <button class="btn btn-purple btn-full" id="btn-run" onclick="procesar()" disabled>
+      <button class="btn btn-purple btn-full" id="btn-run" onclick="ejecutar()" disabled>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        Ejecutar proceso
+        <span id="btn-run-txt">Ejecutar proceso</span>
       </button>
     </div>
   </aside>
@@ -311,7 +315,7 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
     <div class="cp-hd">
       <div>
         <div class="cp-title">Panel de <span>Resultados</span></div>
-        <div class="cp-sub">Tus archivos se procesan en tu espacio privado</div>
+        <div class="cp-sub">Procesamiento seguro · Savia Salud EPS</div>
       </div>
       <div style="display:flex;gap:6px;">
         <button class="btn btn-ghost" id="btn-clear" onclick="limpiarR()" style="display:none">🔄 Limpiar</button>
@@ -335,7 +339,7 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
       <div id="rc" style="display:flex;flex-direction:column;gap:10px;flex:1">
         <div class="welcome">
           <div class="w-art">⚡</div>
-          <div class="w-h">Bienvenido, {{ usuario }}</div>
+          <div class="w-h">Bienvenido a <span style="color:#00b398">Savia EPS</span></div>
           <div class="w-p">Tu espacio es privado. Sube tus archivos, procésalos y descarga los resultados directamente desde aquí.</div>
           <div class="w-steps">
             <div class="w-step"><div class="w-n">1</div>Subir</div>
@@ -402,8 +406,6 @@ async function processDroppedFiles(dropped){
   if(!valid.length){toast('No se encontraron archivos válidos','error',4000);return;}
   const dz=document.getElementById('drop-zone');
   dz.innerHTML='<span class="dz-icon">⏳</span><div class="dz-title">Subiendo '+valid.length+' archivo(s)...</div>';
-  toast('⏳ Subiendo archivo pesado, puede tardar unos segundos...','success',8000);
-
   const formData=new FormData();
   valid.forEach(f=>formData.append('archivos',f));
   try{
@@ -416,6 +418,114 @@ async function processDroppedFiles(dropped){
 }
 function resetDZ(){
   document.getElementById('drop-zone').innerHTML=`<span class="dz-icon">📂</span><div class="dz-title">Arrastra archivos aquí</div><div class="dz-sub">o <b onclick="event.stopPropagation();document.getElementById('file-input').click()">selecciona desde tu equipo</b></div><div class="dz-formats"><span class="dz-fmt csv">CSV</span><span class="dz-fmt xlsx">XLSX</span><span class="dz-fmt xlsx">XLS</span><span class="dz-fmt txt">TXT</span></div>`;
+}
+
+// ── Modo: duplicados o unificar ──
+let modoActual = 'duplicados';
+
+function setModo(modo){
+  modoActual = modo;
+  document.getElementById('btn-mode-dup').className  = 'mode-btn' + (modo==='duplicados'?' active':'');
+  document.getElementById('btn-mode-unif').className = 'mode-btn' + (modo==='unificar'?' active':'');
+  const hint = document.getElementById('modo-hint');
+  const btnTxt = document.getElementById('btn-run-txt');
+  if(modo === 'unificar'){
+    hint.innerHTML = '💡 <b>Modo actual:</b> Selecciona 2 o más archivos para unificar en una sola estructura y eliminar duplicados';
+    btnTxt.textContent = '🔗 Unificar y procesar';
+  } else {
+    hint.innerHTML = '💡 <b>Modo actual:</b> Eliminar duplicados de cada archivo por separado';
+    btnTxt.textContent = 'Ejecutar proceso';
+  }
+  sel.clear(); renderFiles();
+}
+
+function ejecutar(){
+  if(modoActual === 'unificar') unificar();
+  else procesar();
+}
+
+// ── Unificar archivos ──
+async function unificar(){
+  const s=[...sel];
+  if(s.length < 2){ toast('⚠️ Selecciona al menos 2 archivos para unificar','error',4000); return; }
+
+  const pg=document.getElementById('prog'),pb=document.getElementById('prog-bar'),pp=document.getElementById('prog-pct');
+  const p1=document.getElementById('ps1'),p2=document.getElementById('ps2'),p3=document.getElementById('ps3');
+  const phase=(pct,c1,c2,c3)=>{pb.style.width=pct+'%';pp.textContent=pct+'%';p1.className='ps '+c1;p2.className='ps '+c2;p3.className='ps '+c3;};
+
+  pg.classList.add('show');
+  document.getElementById('rc').innerHTML='';
+  document.getElementById('btn-clear').style.display='none';
+  document.getElementById('btn-run').disabled=true;
+
+  phase(20,'on','',''); await w(500);
+  phase(50,'done','on',''); await w(500);
+
+  const t0=Date.now();
+  try{
+    const res = await fetch('/api/unificar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivos:s})});
+    const data = await res.json();
+    phase(85,'done','done','on'); await w(500);
+    phase(100,'done','done','done'); await w(600);
+    pg.classList.remove('show');
+    const el=((Date.now()-t0)/1000).toFixed(1);
+
+    if(data.error){
+      toast('❌ '+data.error,'error',6000);
+      document.getElementById('rc').innerHTML=`<div class="rc err"><div class="err-box">❌ ${data.error}</div></div>`;
+    } else {
+      renderUnificado(data);
+      animN(document.getElementById('s-p'),ses.p,ses.p+1);
+      animN(document.getElementById('s-d'),ses.d,ses.d+data.duplicados_eliminados);
+      animN(document.getElementById('s-f'),ses.f,ses.f+data.filas_resultado);
+      document.getElementById('s-t').textContent=el+'s';
+      ses.p+=1; ses.d+=data.duplicados_eliminados; ses.f+=data.filas_resultado;
+      hist.unshift({n:'Unificado ('+data.archivos_unificados+' archivos)',d:data.duplicados_eliminados,f:data.filas_resultado,t:new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',second:'2-digit'})});
+      renderHist();
+      listarArchivos();
+      setStep(4);
+      toast('✅ '+data.archivos_unificados+' archivos unificados · '+data.duplicados_eliminados.toLocaleString()+' duplicados eliminados','success',5000);
+    }
+  }catch(e){
+    pg.classList.remove('show');
+    toast('Error de conexión','error');
+    document.getElementById('rc').innerHTML=`<div class="rc err"><div class="err-box">❌ ${e.message}</div></div>`;
+  }
+  document.getElementById('btn-run').disabled=false;
+  document.getElementById('btn-clear').style.display='inline-flex';
+}
+
+function renderUnificado(data){
+  let h='';
+  h+=`<div class="dl-banner">
+    <div class="dl-banner-txt">
+      <div class="dl-title">🔗 ¡Archivos unificados!</div>
+      <div class="dl-sub">${data.archivos_unificados} archivos fusionados · ${data.duplicados_eliminados.toLocaleString()} duplicados eliminados</div>
+    </div>
+    <div class="dl-btns" style="flex-wrap:wrap;gap:6px;">
+      <button class="btn btn-purple btn-sm" onclick="descargarZip('limpios')">⬇️ ZIP Unificado limpio</button>
+      ${data.nombre_dup?`<button class="btn btn-red btn-sm" onclick="descargarZip('duplicados')">⬇️ ZIP Duplicados</button>`:''}
+    </div>
+  </div>`;
+
+  h+=`<div class="met-row">
+    <div class="mc purple" style="animation-delay:0s"><div class="mc-ico">📁</div><div class="mc-v purple">${data.archivos_unificados}</div><div class="mc-l">Archivos unidos</div></div>
+    <div class="mc red" style="animation-delay:.07s"><div class="mc-ico">🗑️</div><div class="mc-v red">${data.duplicados_eliminados.toLocaleString()}</div><div class="mc-l">Duplicados</div></div>
+    <div class="mc green" style="animation-delay:.14s"><div class="mc-ico">✅</div><div class="mc-v green">${data.filas_resultado.toLocaleString()}</div><div class="mc-l">Filas finales</div></div>
+  </div>`;
+
+  h+=`<div class="rc ok">
+    <div class="rc-hd"><div class="rc-ico ok">🔗</div><div class="rc-name">Archivo unificado generado</div></div>
+    <span class="unif-badge">🔗 ${data.archivos_unificados} archivos fusionados</span>
+    <div class="rc-stats">
+      <div class="rs"><div class="rs-v b">${data.filas_totales.toLocaleString()}</div><div class="rs-l">Filas totales</div></div>
+      <div class="rs"><div class="rs-v r">${data.duplicados_eliminados.toLocaleString()}</div><div class="rs-l">Duplicados</div></div>
+      <div class="rs"><div class="rs-v g">${data.filas_resultado.toLocaleString()}</div><div class="rs-l">Resultado</div></div>
+    </div>
+    ${data.nombre_dup?'<div class="rc-path dup">🗑️ Duplicados guardados separadamente</div>':'<div class="rc-path" style="color:#10b981;background:#f0fdf4;border-color:#bbf7d0">✅ Sin duplicados encontrados</div>'}
+  </div>`;
+
+  document.getElementById('rc').innerHTML=h;
 }
 
 // ── Listar ──
@@ -502,6 +612,9 @@ async function procesar(){
     if(data.error){
       toast('Error: '+data.error,'error',6000);
       document.getElementById('rc').innerHTML=`<div class="rc err"><div class="err-box">❌ ${data.error}</div></div>`;
+    } else if(!data.resultados || !Array.isArray(data.resultados)){
+      toast('Error: respuesta inesperada del servidor','error',6000);
+      document.getElementById('rc').innerHTML=`<div class="rc err"><div class="err-box">❌ Error inesperado. Intenta de nuevo.</div></div>`;
     } else {
       renderResults(data.resultados);
       const ok=data.resultados.filter(r=>r.estado==='ok');
@@ -520,6 +633,7 @@ async function procesar(){
     }
   }catch(e){
     pg.classList.remove('show');
+    console.error('Error procesar:', e);
     toast('Error de conexión','error');
     document.getElementById('rc').innerHTML=`<div class="rc err"><div class="err-box">❌ ${e.message}</div></div>`;
   }
@@ -570,6 +684,7 @@ async function abrirCarpeta(tipo){
 
 // ── Render resultados ──
 function renderResults(res){
+  if(!res || !Array.isArray(res)){ document.getElementById('rc').innerHTML='<div class="rc err"><div class="err-box">❌ No se recibieron resultados</div></div>'; return; }
   const ok=res.filter(r=>r.estado==='ok');
   const te=ok.reduce((s,r)=>s+r.duplicados_eliminados,0);
   const tf=ok.reduce((s,r)=>s+r.filas_resultado,0);
