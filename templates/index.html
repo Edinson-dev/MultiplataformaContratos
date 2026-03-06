@@ -270,6 +270,15 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
     <div class="lp-hd"><div class="lp-title">⚙️ Archivos</div></div>
     <div class="lp-body">
 
+      <!-- Toggle modo -->
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-mode-dup" onclick="setModo('duplicados')">🗑️ Duplicados</button>
+        <button class="mode-btn" id="btn-mode-unif" onclick="setModo('unificar')">🔗 Unificar</button>
+      </div>
+      <div id="modo-hint" style="font-size:10px;color:#94a3b8;margin-bottom:8px;padding:6px 8px;background:#f8fafc;border-radius:6px;border:1px solid #f1f5f9">
+        💡 <b>Modo:</b> Eliminar duplicados por separado
+      </div>
+
       <div class="drop-zone" id="drop-zone"
            ondragover="dragOver(event)" ondragleave="dragLeave(event)"
            ondrop="dropFiles(event)" onclick="document.getElementById('file-input').click()">
