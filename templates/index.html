@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DataCleanse Pro</title>
+<title>Contrato Clear</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -232,11 +232,11 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
 <!-- TOPBAR -->
 <header class="topbar">
   <div class="tb-mark"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
-  <div class="tb-brand">Savia<span>EPS</span></div>
+  <div class="tb-brand">Contratos<span></span></div>
   <div class="tb-pipe"></div>
   <div class="tb-mod">Módulo de Eliminación de Duplicados</div>
   <div class="tb-right">
-    <span class="tb-badge purple">ENTERPRISE</span>
+    <span class="tb-badge purple">PERSONAL</span>
     <div class="tb-user">
       <div class="tb-avatar">{{ usuario[0]|upper }}</div>
       <span class="tb-username">{{ usuario }}</span>
@@ -272,9 +272,9 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
 
       <!-- Toggle modo -->
       <div class="mode-toggle">
-        <button class="mode-btn active" id="btn-mode-dup" onclick="setModo('duplicados')">🗑️ Duplicados</button>
-        <button class="mode-btn" id="btn-mode-unif" onclick="setModo('unificar')">🔗 Unificar</button>
-        <button class="mode-btn" id="btn-mode-cruce" onclick="setModo('cruzar')">🔀 Cruzar</button>
+        <button class="mode-btn active" id="btn-mode-dup" onclick="setModo('duplicados')">🗑️ Eliminar Duplicados</button>
+        <button class="mode-btn" id="btn-mode-unif" onclick="setModo('unificar')">🔗 Unificar informacion</button>
+        <button class="mode-btn" id="btn-mode-cruce" onclick="setModo('cruzar')">🔀 Cruzar por contratos</button>
       </div>
       <div id="modo-hint" style="font-size:10px;color:#94a3b8;margin-bottom:8px;padding:6px 8px;background:#f8fafc;border-radius:6px;border:1px solid #f1f5f9">
         💡 <b>Modo:</b> Eliminar duplicados por separado
@@ -442,7 +442,7 @@ function setModo(modo){
   modoActual = modo;
   document.getElementById('btn-mode-dup').className   = 'mode-btn' + (modo==='duplicados'?' active':'');
   document.getElementById('btn-mode-unif').className  = 'mode-btn' + (modo==='unificar'?' active':'');
-  document.getElementById('btn-mode-cruce').className = 'mode-btn' + (modo==='cruzar'?' active':'');
+  document.getElementById('btn-mode-cruce').className = 'mode-btn' + (modo==='cruzar por  '?' active':'');
   const hint    = document.getElementById('modo-hint');
   const btnTxt  = document.getElementById('btn-run-txt');
   const cfField = document.getElementById('contrato-field');
