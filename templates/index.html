@@ -274,9 +274,15 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
       <div class="mode-toggle">
         <button class="mode-btn active" id="btn-mode-dup" onclick="setModo('duplicados')">🗑️ Duplicados</button>
         <button class="mode-btn" id="btn-mode-unif" onclick="setModo('unificar')">🔗 Unificar</button>
+        <button class="mode-btn" id="btn-mode-cruce" onclick="setModo('cruzar')">🔀 Cruzar</button>
       </div>
       <div id="modo-hint" style="font-size:10px;color:#94a3b8;margin-bottom:8px;padding:6px 8px;background:#f8fafc;border-radius:6px;border:1px solid #f1f5f9">
         💡 <b>Modo:</b> Eliminar duplicados por separado
+      </div>
+      <div id="contrato-field" style="display:none;margin-bottom:8px">
+        <div class="field-lbl">🔖 Número de contrato a filtrar</div>
+        <input type="text" id="input-contrato" placeholder="Ej: 450830-RAEC200001"
+               style="width:100%;background:#f0faf8;border:1.5px solid #b2e8e0;border-radius:7px;padding:8px 10px;font-size:12px;color:#1a4a5c;outline:none;font-family:'Inter',sans-serif">
       </div>
 
       <div class="drop-zone" id="drop-zone"
@@ -434,22 +440,32 @@ let modoActual = 'duplicados';
 
 function setModo(modo){
   modoActual = modo;
-  document.getElementById('btn-mode-dup').className  = 'mode-btn' + (modo==='duplicados'?' active':'');
-  document.getElementById('btn-mode-unif').className = 'mode-btn' + (modo==='unificar'?' active':'');
-  const hint = document.getElementById('modo-hint');
-  const btnTxt = document.getElementById('btn-run-txt');
+  document.getElementById('btn-mode-dup').className   = 'mode-btn' + (modo==='duplicados'?' active':'');
+  document.getElementById('btn-mode-unif').className  = 'mode-btn' + (modo==='unificar'?' active':'');
+  document.getElementById('btn-mode-cruce').className = 'mode-btn' + (modo==='cruzar'?' active':'');
+  const hint    = document.getElementById('modo-hint');
+  const btnTxt  = document.getElementById('btn-run-txt');
+  const cfField = document.getElementById('contrato-field');
+
   if(modo === 'unificar'){
-    hint.innerHTML = '💡 <b>Modo actual:</b> Selecciona 2 o más archivos para unificar en una sola estructura y eliminar duplicados';
+    hint.innerHTML = '💡 <b>Modo:</b> Selecciona 2 o más archivos para unificar y eliminar duplicados';
     btnTxt.textContent = '🔗 Unificar y procesar';
+    cfField.style.display = 'none';
+  } else if(modo === 'cruzar'){
+    hint.innerHTML = '💡 <b>Modo:</b> Selecciona exactamente 2 archivos · El específico manda, el general aporta las facturas faltantes del contrato';
+    btnTxt.textContent = '🔀 Cruzar archivos';
+    cfField.style.display = 'block';
   } else {
-    hint.innerHTML = '💡 <b>Modo actual:</b> Eliminar duplicados de cada archivo por separado';
+    hint.innerHTML = '💡 <b>Modo:</b> Eliminar duplicados de cada archivo por separado';
     btnTxt.textContent = 'Ejecutar proceso';
+    cfField.style.display = 'none';
   }
   sel.clear(); renderFiles();
 }
 
 function ejecutar(){
   if(modoActual === 'unificar') unificar();
+  else if(modoActual === 'cruzar') cruzar();
   else procesar();
 }
 
@@ -502,6 +518,89 @@ async function unificar(){
   }
   document.getElementById('btn-run').disabled=false;
   document.getElementById('btn-clear').style.display='inline-flex';
+}
+
+// ── Cruzar archivos por contrato ──
+async function cruzar(){
+  const s=[...sel];
+  if(s.length !== 2){ toast('⚠️ Selecciona exactamente 2 archivos para cruzar','error',4000); return; }
+  const contrato = document.getElementById('input-contrato').value.trim();
+  if(!contrato){ toast('⚠️ Escribe el número de contrato a filtrar','error',4000); return; }
+
+  const pg=document.getElementById('prog'),pb=document.getElementById('prog-bar'),pp=document.getElementById('prog-pct');
+  const p1=document.getElementById('ps1'),p2=document.getElementById('ps2'),p3=document.getElementById('ps3');
+  const phase=(pct,c1,c2,c3)=>{pb.style.width=pct+'%';pp.textContent=pct+'%';p1.className='ps '+c1;p2.className='ps '+c2;p3.className='ps '+c3;};
+
+  pg.classList.add('show');
+  document.getElementById('rc').innerHTML='';
+  document.getElementById('btn-clear').style.display='none';
+  document.getElementById('btn-run').disabled=true;
+
+  phase(20,'on','',''); await w(500);
+  phase(50,'done','on',''); await w(500);
+
+  const t0=Date.now();
+  try{
+    const res = await fetch('/api/cruzar',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({archivos:s, contrato})});
+    const data = await res.json();
+    phase(85,'done','done','on'); await w(500);
+    phase(100,'done','done','done'); await w(600);
+    pg.classList.remove('show');
+    const el=((Date.now()-t0)/1000).toFixed(1);
+
+    if(data.error){
+      toast('❌ '+data.error,'error',6000);
+      document.getElementById('rc').innerHTML=`<div class="rc err"><div class="err-box">❌ ${data.error}</div></div>`;
+    } else {
+      renderCruce(data);
+      animN(document.getElementById('s-p'),ses.p,ses.p+1);
+      animN(document.getElementById('s-d'),ses.d,ses.d+data.duplicados_eliminados);
+      animN(document.getElementById('s-f'),ses.f,ses.f+data.filas_resultado);
+      document.getElementById('s-t').textContent=el+'s';
+      ses.p+=1; ses.d+=data.duplicados_eliminados; ses.f+=data.filas_resultado;
+      hist.unshift({n:'Cruce: '+data.contrato,d:data.duplicados_eliminados,f:data.filas_resultado,
+        t:new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',second:'2-digit'})});
+      renderHist(); listarArchivos(); setStep(4);
+      toast('✅ Cruce completado · '+data.faltantes_agregados+' facturas agregadas del informe general','success',5000);
+    }
+  }catch(e){
+    pg.classList.remove('show');
+    toast('Error de conexión','error');
+    document.getElementById('rc').innerHTML=`<div class="rc err"><div class="err-box">❌ ${e.message}</div></div>`;
+  }
+  document.getElementById('btn-run').disabled=false;
+  document.getElementById('btn-clear').style.display='inline-flex';
+}
+
+function renderCruce(data){
+  let h='';
+  h+=`<div class="dl-banner">
+    <div class="dl-banner-txt">
+      <div class="dl-title">🔀 ¡Cruce completado! · Contrato ${data.contrato}</div>
+      <div class="dl-sub">${data.faltantes_agregados} facturas agregadas del informe general · ${data.duplicados_eliminados.toLocaleString()} duplicados eliminados</div>
+    </div>
+    <div class="dl-btns">
+      <button class="btn btn-purple btn-sm" onclick="descargarZip('limpios')">⬇️ ZIP Resultado</button>
+    </div>
+  </div>`;
+
+  h+=`<div class="met-row">
+    <div class="mc purple" style="animation-delay:0s"><div class="mc-ico">📋</div><div class="mc-v purple">${data.filas_especifico}</div><div class="mc-l">Del contrato</div></div>
+    <div class="mc green" style="animation-delay:.07s"><div class="mc-ico">➕</div><div class="mc-v green">${data.faltantes_agregados}</div><div class="mc-l">Agregadas del cm</div></div>
+    <div class="mc red" style="animation-delay:.14s"><div class="mc-ico">🗑️</div><div class="mc-v red">${data.duplicados_eliminados}</div><div class="mc-l">Duplicados</div></div>
+  </div>`;
+
+  h+=`<div class="rc ok">
+    <div class="rc-hd"><div class="rc-ico ok">🔀</div><div class="rc-name">Resultado cruce · ${data.contrato}</div></div>
+    <div class="rc-stats">
+      <div class="rs"><div class="rs-v b">${data.filas_totales.toLocaleString()}</div><div class="rs-l">Filas totales</div></div>
+      <div class="rs"><div class="rs-v r">${data.duplicados_eliminados.toLocaleString()}</div><div class="rs-l">Duplicados</div></div>
+      <div class="rs"><div class="rs-v g">${data.filas_resultado.toLocaleString()}</div><div class="rs-l">Resultado final</div></div>
+    </div>
+  </div>`;
+
+  document.getElementById('rc').innerHTML=h;
 }
 
 function renderUnificado(data){

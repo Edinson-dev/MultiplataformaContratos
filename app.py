@@ -348,6 +348,40 @@ def procesar():
     })
 
 
+def cruzar_por_contrato(df_especifico, df_general, numero_contrato):
+    """
+    Cruza dos archivos por contrato:
+    - df_especifico: archivo del contrato (ej: 450830) → manda
+    - df_general: informe general (cm) → filtra por contrato y aporta facturas faltantes
+    - numero_contrato: contrato a filtrar en df_general
+    """
+    # 1. Normalizar columnas de ambos
+    df_esp = normalizar_columnas(df_especifico.copy())
+    df_gen = normalizar_columnas(df_general.copy())
+
+    # 2. Filtrar general por contrato
+    if 'numero_contrato' in df_gen.columns:
+        df_gen_filtrado = df_gen[
+            df_gen['numero_contrato'].astype(str).str.strip().str.upper() ==
+            numero_contrato.strip().upper()
+        ].copy()
+    else:
+        df_gen_filtrado = df_gen.copy()
+
+    # 3. Facturas que están en el general filtrado pero NO en el específico
+    facts_esp = set(df_esp['numero_facturado'].astype(str).str.strip())
+    facts_gen = set(df_gen_filtrado['numero_facturado'].astype(str).str.strip())
+    solo_en_general = facts_gen - facts_esp
+
+    df_faltantes = df_gen_filtrado[
+        df_gen_filtrado['numero_facturado'].astype(str).str.strip().isin(solo_en_general)
+    ].copy()
+
+    # 4. Unir: específico manda + faltantes del general
+    df_final = pd.concat([df_esp, df_faltantes], ignore_index=True)
+    return df_final, len(df_faltantes)
+
+
 @app.route("/api/unificar", methods=["POST"])
 @login_required
 def unificar():
@@ -413,6 +447,87 @@ def unificar():
             "nombre_dup":            f"{nombre_base}_duplicados.xlsx" if ruta_dup else None,
             "carpeta_limpios":       carpeta_limpios,
             "carpeta_duplicados":    carpeta_duplicados
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e) + "\n" + traceback.format_exc()}), 500
+
+
+@app.route("/api/cruzar", methods=["POST"])
+@login_required
+def cruzar():
+    """Cruza archivo específico (manda) con informe general filtrado por contrato."""
+    carpeta  = carpeta_usuario(session["usuario"])
+    data     = request.json
+    archivos = data.get("archivos", [])          # [ruta_especifico, ruta_general]
+    contrato = data.get("contrato", "").strip()  # número de contrato a filtrar
+
+    if len(archivos) != 2:
+        return jsonify({"error": "Selecciona exactamente 2 archivos: el específico y el informe general"}), 400
+    if not contrato:
+        return jsonify({"error": "Escribe el número de contrato a filtrar"}), 400
+
+    carpeta_limpios    = os.path.join(carpeta, "Sin Duplicados")
+    carpeta_duplicados = os.path.join(carpeta, "Duplicados")
+    os.makedirs(carpeta_limpios,    exist_ok=True)
+    os.makedirs(carpeta_duplicados, exist_ok=True)
+
+    # Limpiar anteriores
+    for f in glob.glob(os.path.join(carpeta_limpios, "*.xlsx")):
+        os.remove(f)
+    for root, dirs, files in os.walk(carpeta_duplicados):
+        for f in files:
+            os.remove(os.path.join(root, f))
+
+    try:
+        # Leer ambos archivos
+        df1 = leer_archivo(archivos[0])
+        df1 = limpiar_nombres_columnas(df1)
+        df2 = leer_archivo(archivos[1])
+        df2 = limpiar_nombres_columnas(df2)
+
+        # Detectar cuál es el específico (menos filas o un solo contrato)
+        contratos1 = df1['numero_contrato'].nunique() if 'numero_contrato' in df1.columns else 99
+        contratos2 = df2['numero_contrato'].nunique() if 'numero_contrato' in df2.columns else 99
+
+        if contratos1 <= contratos2:
+            df_especifico, df_general = df1, df2
+        else:
+            df_especifico, df_general = df2, df1
+
+        # Cruzar
+        df_final, faltantes_agregados = cruzar_por_contrato(df_especifico, df_general, contrato)
+        filas_orig = len(df_final)
+
+        # Eliminar duplicados
+        df_limpio, df_duplicados = separar_duplicados(df_final)
+
+        # Guardar
+        nombre_base = f"cruce_{contrato.replace('-','_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        ruta_limpio = os.path.join(carpeta_limpios, f"{nombre_base}.xlsx")
+        guardar_excel(df_limpio, ruta_limpio, contrato[:31])
+
+        ruta_dup = None
+        if len(df_duplicados) > 0:
+            carpeta_dup = os.path.join(carpeta_duplicados, "cruce")
+            os.makedirs(carpeta_dup, exist_ok=True)
+            ruta_dup = os.path.join(carpeta_dup, f"{nombre_base}_duplicados.xlsx")
+            guardar_excel(df_duplicados, ruta_dup, "Duplicados")
+
+        # Eliminar originales
+        for ruta in archivos:
+            if os.path.isfile(ruta):
+                os.remove(ruta)
+
+        return jsonify({
+            "estado":                "ok",
+            "contrato":              contrato,
+            "filas_especifico":      len(df_especifico),
+            "faltantes_agregados":   faltantes_agregados,
+            "filas_totales":         filas_orig,
+            "duplicados_eliminados": len(df_duplicados),
+            "filas_resultado":       len(df_limpio),
+            "carpeta_limpios":       carpeta_limpios,
         })
 
     except Exception as e:
@@ -500,10 +615,9 @@ def abrir_carpeta():
 
 if __name__ == "__main__":
     print("\n" + "="*55)
-    print("  Contratos · Modo Web Compartido")
+    print("  DataCleanse Pro · Versión Híbrida")
     print("="*55)
-    print("  Servidor iniciando...")
+    print("  Abre tu navegador en:  http://localhost:5000")
+    print("  Para cerrar presiona:  Ctrl + C")
     print("="*55 + "\n")
-
-    port = int(os.environ.get("PORT", 8000))
-    app.run(debug=False, host="0.0.0.0", port=port)
+    app.run(debug=False, port=5000, host="0.0.0.0")
