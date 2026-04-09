@@ -401,17 +401,15 @@ def cruzar_por_contrato(df_especifico, df_general, numero_contrato, incluir_sin_
         df_gen_filtrado = df_gen.copy()
 
     # 3. Facturas que están en el general filtrado pero NO en el específico
+    # 3. Unir: específico + general filtrado (la deduplicación posterior elegirá la mejor de cada uno)
+    df_final = pd.concat([df_esp, df_gen_filtrado], ignore_index=True)
+
+    # 4. Calcular cuántas facturas ÚNICAS del general no estaban en el específico (para el reporte)
     facts_esp = set(df_esp['numero_facturado'].astype(str).str.strip())
     facts_gen = set(df_gen_filtrado['numero_facturado'].astype(str).str.strip())
-    solo_en_general = facts_gen - facts_esp
+    faltantes_agregados = len(facts_gen - facts_esp)
 
-    df_faltantes = df_gen_filtrado[
-        df_gen_filtrado['numero_facturado'].astype(str).str.strip().isin(solo_en_general)
-    ].copy()
-
-    # 4. Unir: específico manda + faltantes del general
-    df_final = pd.concat([df_esp, df_faltantes], ignore_index=True)
-    return df_final, len(df_faltantes)
+    return df_final, faltantes_agregados
 
 
 @app.route("/api/unificar", methods=["POST"])
