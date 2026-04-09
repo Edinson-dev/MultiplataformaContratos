@@ -29,6 +29,9 @@ COLUMNA_FACTURA = "numero_facturado"
 COLUMNA_FECHA   = "fecha_prestacion"
 EXTENSIONES     = ["*.csv", "*.txt", "*.xlsx", "*.xls", "*.xlsm"]
 
+# Valores que se consideran como "sin contrato" en todo el sistema
+VALORES_SIN_CONTRATO = {'SIN CONTRATO', 'SINCONTRATO', 'NA', 'N/A', 'VARIOS', '0', 'NONE', '', 'nan', 'None'}
+
 # Carpeta base: en local usa la carpeta del proyecto, en Railway usa user_data/
 ES_RAILWAY = os.environ.get("RAILWAY_ENVIRONMENT") is not None
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
@@ -179,10 +182,9 @@ def separar_duplicados(df):
     df["_fecha_orden"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=False)
     df["_tiene_fecha"] = df["_fecha_orden"].notna().astype(int)
     
-    # Identificar si la fila tiene un contrato real (no genérico)
-    sin_contrato = {'SIN CONTRATO', 'SINCONTRATO', 'NA', 'N/A', 'VARIOS', '0', 'NONE', '', 'nan', 'None'}
+    # Identificar si la fila tiene un contrato real (no genérico) usando la lista global
     df["_tiene_contrato"] = df["numero_contrato"].astype(str).str.strip().str.upper().apply(
-        lambda x: 0 if x in sin_contrato else 1
+        lambda x: 0 if x in VALORES_SIN_CONTRATO else 1
     )
 
     # Ordenar por Factura, Prioridad de Contrato, Existencia de Fecha y Valor de Fecha
@@ -373,7 +375,6 @@ def cruzar_por_contrato(df_especifico, df_general, numero_contrato, incluir_sin_
     df_gen = normalizar_columnas(df_general.copy())
 
     contrato_upper = numero_contrato.strip().upper()
-    VALORES_SIN_CONTRATO = {'SIN CONTRATO', 'NA', 'N/A', 'VARIOS', '0', 'NONE', ''}
 
     # 1b. Filtrar el ESPECÍFICO: eliminar filas de otros contratos
     if 'numero_contrato' in df_esp.columns:
@@ -392,7 +393,7 @@ def cruzar_por_contrato(df_especifico, df_general, numero_contrato, incluir_sin_
         mask_contrato = col == contrato_upper
 
         if incluir_sin_contrato:
-            mask_sin_contrato = col.isin({'SIN CONTRATO', 'NA', 'N/A', 'VARIOS', '0', 'NONE', ''})
+            mask_sin_contrato = col.isin(VALORES_SIN_CONTRATO)
             df_gen_filtrado = df_gen[mask_contrato | mask_sin_contrato].copy()
         else:
             df_gen_filtrado = df_gen[mask_contrato].copy()
