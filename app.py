@@ -178,14 +178,25 @@ def guardar_excel(df, ruta, nombre_hoja):
 def separar_duplicados(df):
     df["_fecha_orden"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=False)
     df["_tiene_fecha"] = df["_fecha_orden"].notna().astype(int)
-    df_ord = df.sort_values(
-        by=[COLUMNA_FACTURA, "_tiene_fecha", "_fecha_orden"],
-        ascending=[True, False, False], na_position="last"
+    
+    # Identificar si la fila tiene un contrato real (no genérico)
+    sin_contrato = {'SIN CONTRATO', 'SINCONTRATO', 'NA', 'N/A', 'VARIOS', '0', 'NONE', '', 'nan', 'None'}
+    df["_tiene_contrato"] = df["numero_contrato"].astype(str).str.strip().str.upper().apply(
+        lambda x: 0 if x in sin_contrato else 1
     )
+
+    # Ordenar por Factura, Prioridad de Contrato, Existencia de Fecha y Valor de Fecha
+    df_ord = df.sort_values(
+        by=[COLUMNA_FACTURA, "_tiene_contrato", "_tiene_fecha", "_fecha_orden"],
+        ascending=[True, False, False, False], na_position="last"
+    )
+    
     df_limpio     = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first")
     df_duplicados = df_ord[~df_ord.index.isin(df_limpio.index)]
+    
     for frame in [df_limpio, df_duplicados]:
-        frame.drop(columns=["_fecha_orden", "_tiene_fecha"], inplace=True)
+        frame.drop(columns=["_fecha_orden", "_tiene_fecha", "_tiene_contrato"], inplace=True)
+        
     return df_limpio.sort_index().reset_index(drop=True), df_duplicados.reset_index(drop=True)
 
 
