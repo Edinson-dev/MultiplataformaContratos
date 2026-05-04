@@ -105,29 +105,40 @@ def leer_archivo(ruta):
     ext = ext.lower()
     if ext in [".xlsx", ".xls", ".xlsm"]:
         return pd.read_excel(ruta)
-    
     encodings = ["utf-8-sig", "latin-1", "iso-8859-1", "cp1252"]
     for encoding in encodings:
         try:
-            # Intento rápido para detectar separador
-            with open(ruta, 'r', encoding=encoding) as f:
-                linea = f.readline()
-                sep = '|' if '|' in linea else (';' if ';' in linea else ',')
-            
-            # Leer usando el motor C (más eficiente que python)
-            return pd.read_csv(ruta, sep=sep, encoding=encoding, low_memory=False)
-        except:
-            continue
+            df_prueba = pd.read_csv(ruta, nrows=5, header=None, encoding=encoding)
+            if df_prueba.shape[1] == 1:
+                primera_linea = str(df_prueba.iloc[0, 0]) if len(df_prueba) > 0 else ""
+                if '|' in primera_linea:
+                    df = pd.read_csv(ruta, sep='|', encoding=encoding, low_memory=False)
+                elif ';' in primera_linea:
+                    df = pd.read_csv(ruta, sep=';', encoding=encoding, low_memory=False)
+                else:
+                    df = pd.read_csv(ruta, sep=',', encoding=encoding, low_memory=False)
+            else:
+                df = pd.read_csv(ruta, sep=None, engine="python", encoding=encoding)
+            df.columns = df.columns.str.strip()
+            for col in df.columns:
+                if df[col].dtype == object:
+                    muestra = df[col].dropna().head(10).astype(str)
+                    if muestra.str.contains(r'\$').any():
+                        df[col] = (df[col].astype(str).str.strip().str.replace('$', '', regex=False).str.strip().str.replace('.', '', regex=False).str.replace(',', '.', regex=False).replace('nan', None))
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+            return df
+        except: continue
     return pd.read_csv(ruta, sep=None, engine="python", encoding="latin-1")
 
 def guardar_excel(df, ruta, nombre_hoja):
     nombre_hoja = nombre_hoja[:31]
-    # Usar modo "zip" comprimido para ahorrar RAM durante la creación
-    df.to_excel(ruta, sheet_name=nombre_hoja, index=False, engine="openpyxl")
-    
-    # Liberar memoria explícitamente si el DF es muy grande
-    import gc
-    gc.collect()
+    with pd.ExcelWriter(ruta, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name=nombre_hoja, index=False)
+        ws = writer.sheets[nombre_hoja]
+        for col in ws.columns:
+            valores = [str(c.value) if c.value is not None else "" for c in col[:6]]
+            ancho = min(max((len(v) for v in valores), default=10) + 4, 45)
+            ws.column_dimensions[col[0].column_letter].width = ancho
 
 def separar_duplicados(df):
     df["_fecha_orden"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=False)
