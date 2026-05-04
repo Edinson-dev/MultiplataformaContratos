@@ -32,8 +32,10 @@ EXTENSIONES     = ["*.csv", "*.txt", "*.xlsx", "*.xls", "*.xlsm"]
 
 VALORES_SIN_CONTRATO = {'SIN CONTRATO', 'SINCONTRATO', 'NA', 'N/A', 'VARIOS', '0', 'NONE', '', 'nan', 'None'}
 
-# Carpeta base: en local usa la carpeta del proyecto, en Railway usa user_data/
+# Carpeta base: detecta si es Railway, Vercel o Render
 ES_RAILWAY = os.environ.get("RAILWAY_ENVIRONMENT") is not None
+ES_VERCEL  = os.environ.get("VERCEL") is not None
+ES_RENDER  = os.environ.get("RENDER") is not None
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 
 # Estructura de datos
@@ -74,13 +76,18 @@ def unificar_archivos(rutas):
 
 def carpeta_usuario(username):
     """
-    - En Railway: user_data/{usuario}/
-    - En local:   carpeta del proyecto (mismo nivel que app.py)
+    Define la ruta de almacenamiento según el entorno:
+    - Vercel/Render: /tmp/{username}
+    - Railway: {BASE_DIR}/user_data/{username}
+    - Local: {BASE_DIR}/{username}
     """
-    if ES_RAILWAY:
+    if ES_VERCEL or ES_RENDER:
+        path = os.path.join("/tmp", username)
+    elif ES_RAILWAY:
         path = os.path.join(BASE_DIR, "user_data", username)
     else:
         path = os.path.join(BASE_DIR, username) if username != "admin" else BASE_DIR
+    
     os.makedirs(path, exist_ok=True)
     return path
 
