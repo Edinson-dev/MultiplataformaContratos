@@ -51,6 +51,11 @@ ESTRUCTURA_FINAL = [
 MAPEO_COLUMNAS = {
     "valor_pendiente_actual":  "valor_pendiente",
     "valor_aceptado_eps":      "valor_pagado_eps",
+    "fecha_de_prestacion":      "fecha_prestacion",
+    "fecha_de_radicacion":      "fecha_radicacion",
+    "numero_de_factura":        "numero_facturado",
+    "numero_de_contrato":       "numero_contrato",
+    "fecha_prestacion_servicio": "fecha_prestacion"
 }
 
 COLUMNAS_IGNORAR = {"naturaleza_juridica"}
@@ -104,7 +109,11 @@ def extraer_contrato(nombre_archivo):
     return numeros[0] if numeros else os.path.splitext(nombre_archivo)[0]
 
 def limpiar_nombres_columnas(df):
-    df.columns = df.columns.str.strip().str.lower().str.replace('\ufeff', '', regex=False)
+    # Limpieza profunda: minúsculas, sin espacios extra, reemplazar espacios por guiones bajos
+    df.columns = df.columns.str.strip().str.lower() \
+                           .str.replace(' ', '_', regex=False) \
+                           .str.replace('.', '', regex=False) \
+                           .str.replace('\ufeff', '', regex=False)
     return df
 
 def leer_archivo(ruta):
