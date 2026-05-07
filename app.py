@@ -148,10 +148,10 @@ def guardar_excel(df, ruta, nombre_hoja):
             ws.column_dimensions[col[0].column_letter].width = ancho
 
 def separar_duplicados(df):
-    # Normalizar columna de factura para asegurar detección de duplicados
+    # Normalizar columna de factura
     df[COLUMNA_FACTURA] = df[COLUMNA_FACTURA].astype(str).str.strip().str.upper()
     
-    # Intentar parsear fecha con dayfirst=True (común en formatos latinos)
+    # Parseo de fecha robusto (maneja fechas mixtas y objetos datetime de Excel)
     df["_fecha_orden"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=True)
     df["_tiene_fecha"] = df["_fecha_orden"].notna().astype(int)
     
@@ -160,23 +160,30 @@ def separar_duplicados(df):
         lambda x: 0 if x in VALORES_SIN_CONTRATO else 1
     )
     
-    # Calcular puntuación de completitud: cuántas columnas de datos NO están vacías
-    # Consideramos las columnas de la estructura final
+    # Puntuación de completitud mejorada: 
+    # Ignoramos valores que son nulos, ceros, vacíos o "N/A"
     cols_datos = [c for c in ESTRUCTURA_FINAL if c not in [COLUMNA_FACTURA, COLUMNA_FECHA]]
-    df["_completitud"] = df[cols_datos].apply(lambda x: x.notna().sum(), axis=1)
+    
+    def puntuacion_celda(val):
+        if pd.isna(val): return 0
+        s = str(val).strip().upper()
+        if s in ["0", "0.0", "", "NONE", "NAN", "N/A", "NA", "0,0"]: return 0
+        return 1
+
+    df["_completitud"] = df[cols_datos].applymap(puntuacion_celda).sum(axis=1)
     
     # Ordenar priorizando:
-    # 1. El número de factura (para agrupar)
-    # 2. Si tiene fecha (preferimos registros con fecha válida)
-    # 3. La fecha más reciente (DESC - la más nueva arriba)
-    # 4. Mayor completitud de datos (DESC - la que tenga más info arriba)
-    # 5. Si tiene contrato real (DESC - 1 sobre 0)
+    # 1. Factura
+    # 2. Tiene Fecha
+    # 3. Fecha más actual (la más nueva arriba)
+    # 4. Mayor completitud (la que tenga más datos reales arriba)
+    # 5. Tiene contrato
     df_ord = df.sort_values(
         by=[COLUMNA_FACTURA, "_tiene_fecha", "_fecha_orden", "_completitud", "_tiene_contrato"],
         ascending=[True, False, False, False, False], na_position="last"
     )
     
-    # Eliminar duplicados manteniendo el primero (el mejor según el criterio anterior)
+    # Eliminar duplicados manteniendo el primero (el mejor)
     df_limpio     = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first")
     df_duplicados = df_ord[~df_ord.index.isin(df_limpio.index)]
     
