@@ -157,25 +157,58 @@ def guardar_excel(df, ruta, nombre_hoja):
             ws.column_dimensions[col[0].column_letter].width = ancho
 
 def separar_duplicados(df):
-    # 1. Normalización de Factura (quitar .0, espacios y ceros a la izquierda innecesarios)
+    # 1. Normalización de Factura (más agresiva)
     def clean_id(val):
         if pd.isna(val): return "NAN"
         s = str(val).strip().upper()
+        # Eliminar ceros a la izquierda para que '00123' y '123' sean iguales
+        s = s.lstrip('0')
+        # Eliminar .0 al final (común en Excel)
         if s.endswith('.0'): s = s[:-2]
+        # Si después de limpiar queda vacío, era '0' o similar
+        if not s: return "0"
         return s
     
     df[COLUMNA_FACTURA] = df[COLUMNA_FACTURA].apply(clean_id)
     
-    # 2. Convertir fecha a Timestamp numérico para ordenamiento infalible
-    # Los NaT (fechas inválidas) se convertirán en un número muy pequeño
-    df["_ts"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=True).apply(lambda x: x.timestamp() if pd.notnull(x) else -1)
+    # 2. Búsqueda de la fecha más reciente (VIGENTE) en toda la fila
+    def parse_fecha_inteligente(row):
+        fechas_encontradas = []
+        # Columnas preferentes
+        prioridad = [COLUMNA_FECHA, "fecha_radicacion", "fecha_proceso_radicacion"]
+        # Otras posibles columnas de fecha
+        otras_cols = [c for c in row.index if 'fecha' in str(c).lower() and c not in prioridad]
+        
+        for col in (prioridad + otras_cols):
+            val = row.get(col)
+            if pd.notnull(val) and str(val).strip() != "":
+                try:
+                    # Intentar parsear con día primero (estándar ES)
+                    dt = pd.to_datetime(val, dayfirst=True, errors='coerce')
+                    if pd.isna(dt):
+                        # Intentar formato flexible si el anterior falló
+                        dt = pd.to_datetime(val, dayfirst=False, errors='coerce')
+                    
+                    if pd.notnull(dt):
+                        fechas_encontradas.append(dt)
+                except: continue
+        
+        if fechas_encontradas:
+            # IMPORTANTE: Devolvemos la fecha más RECIENTE encontrada en esta fila
+            # Esto garantiza que si hay rastros de 2024/2025, esta fila se considere "más vigente"
+            return max(fechas_encontradas)
+        return pd.NaT
+
+    df["_dt_final"] = df.apply(parse_fecha_inteligente, axis=1)
+    # Convertir a timestamp para ordenamiento numérico fácil
+    df["_ts"] = df["_dt_final"].apply(lambda x: x.timestamp() if pd.notnull(x) else -1.0)
     
-    # 3. Puntuación de completitud
+    # 3. Score de Completitud (priorizar filas con más datos útiles)
     cols_datos = [c for c in ESTRUCTURA_FINAL if c not in [COLUMNA_FACTURA, COLUMNA_FECHA]]
     def score(val):
         if pd.isna(val): return 0
         s = str(val).strip().upper()
-        if s in ["0", "0.0", "", "NONE", "NAN", "N/A", "NA", "0,0"]: return 0
+        if s in ["0", "0.0", "", "NONE", "NAN", "N/A", "NA", "0,0", "NULL"]: return 0
         return 1
     
     df["_comp"] = 0
@@ -183,21 +216,22 @@ def separar_duplicados(df):
         if col in df.columns:
             df["_comp"] += df[col].map(score)
             
-    # 4. ORDENAMIENTO POR TIMESTAMP (El más grande es el más nuevo)
-    df_ord = df.sort_values(
-        by=[COLUMNA_FACTURA, "_ts", "_comp"],
-        ascending=[True, False, False]
-    )
+    # 4. ORDENAMIENTO CRÍTICO:
+    # Primero por factura, luego por fecha DESCENDENTE (más reciente arriba), luego por completitud
+    df_ord = df.sort_values(by=[COLUMNA_FACTURA, "_ts", "_comp"], ascending=[True, False, False])
     
-    # 5. Eliminar duplicados manteniendo el primero (el de mayor timestamp)
-    df_limpio     = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first")
-    df_duplicados = df_ord[~df_ord.index.isin(df_limpio.index)]
+    # 5. Mantener el primero (el más reciente y completo)
+    df_limpio     = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first").copy()
+    df_duplicados = df_ord[~df_ord.index.isin(df_limpio.index)].copy()
     
-    # Limpiar auxiliares
+    # Limpieza de columnas auxiliares
+    cols_aux = ["_dt_final", "_ts", "_comp"]
     for frame in [df_limpio, df_duplicados]:
-        frame.drop(columns=[c for c in ["_ts", "_comp"] if c in frame.columns], inplace=True)
+        cols_existentes = [c for c in cols_aux if c in frame.columns]
+        if cols_existentes:
+            frame.drop(columns=cols_existentes, inplace=True)
         
-    return df_limpio.sort_index().reset_index(drop=True), df_duplicados.reset_index(drop=True)
+    return df_limpio.reset_index(drop=True), df_duplicados.reset_index(drop=True)
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -325,7 +359,15 @@ def unificar():
             guardar_excel(df_duplicados, ruta_dup, "Duplicados")
         for ruta in archivos:
             if os.path.isfile(ruta): os.remove(ruta)
-        return jsonify({"estado": "ok", "archivos_unificados": len(archivos), "filas_totales": filas_orig, "duplicados_eliminados": len(df_duplicados), "filas_resultado": len(df_limpio), "nombre_limpio": f"{nombre_base}.xlsx"})
+        return jsonify({
+            "estado": "ok", 
+            "version": "2.0_debug_dates",
+            "archivos_unificados": len(archivos), 
+            "filas_totales": filas_orig, 
+            "duplicados_eliminados": len(df_duplicados), 
+            "filas_resultado": len(df_limpio), 
+            "nombre_limpio": f"{nombre_base}.xlsx"
+        })
     except Exception as e:
         import gc
         gc.collect()
