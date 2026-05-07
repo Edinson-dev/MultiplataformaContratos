@@ -170,7 +170,10 @@ def separar_duplicados(df):
         if s in ["0", "0.0", "", "NONE", "NAN", "N/A", "NA", "0,0"]: return 0
         return 1
 
-    df["_completitud"] = df[cols_datos].applymap(puntuacion_celda).sum(axis=1)
+    df["_completitud"] = 0
+    for col in cols_datos:
+        if col in df.columns:
+            df["_completitud"] += df[col].map(puntuacion_celda)
     
     # Ordenar priorizando:
     # 1. Factura
