@@ -157,52 +157,45 @@ def guardar_excel(df, ruta, nombre_hoja):
             ws.column_dimensions[col[0].column_letter].width = ancho
 
 def separar_duplicados(df):
-    # 1. Normalización ultra-robusta de factura (evita que 211270.0 y 211270 sean diferentes)
-    def normalizar_id_factura(val):
+    # 1. Normalización de Factura (quitar .0, espacios y ceros a la izquierda innecesarios)
+    def clean_id(val):
         if pd.isna(val): return "NAN"
-        try:
-            # Si es un número (o string numérico), lo convertimos a entero para quitar el .0
-            return str(int(float(str(val).strip()))).upper()
-        except:
-            # Si tiene letras (ej. "FAC-123"), solo limpiamos espacios
-            return str(val).strip().upper()
-
-    df[COLUMNA_FACTURA] = df[COLUMNA_FACTURA].apply(normalizar_id_factura)
+        s = str(val).strip().upper()
+        if s.endswith('.0'): s = s[:-2]
+        return s
     
-    # 2. Parseo de fecha con prioridad a formatos comunes
-    df["_fecha_orden"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=True)
+    df[COLUMNA_FACTURA] = df[COLUMNA_FACTURA].apply(clean_id)
     
-    # 3. Puntuación de completitud para desempates
+    # 2. Convertir fecha a Timestamp numérico para ordenamiento infalible
+    # Los NaT (fechas inválidas) se convertirán en un número muy pequeño
+    df["_ts"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=True).apply(lambda x: x.timestamp() if pd.notnull(x) else -1)
+    
+    # 3. Puntuación de completitud
     cols_datos = [c for c in ESTRUCTURA_FINAL if c not in [COLUMNA_FACTURA, COLUMNA_FECHA]]
-    def puntuacion_celda(val):
+    def score(val):
         if pd.isna(val): return 0
         s = str(val).strip().upper()
         if s in ["0", "0.0", "", "NONE", "NAN", "N/A", "NA", "0,0"]: return 0
         return 1
     
-    df["_completitud"] = 0
+    df["_comp"] = 0
     for col in cols_datos:
         if col in df.columns:
-            df["_completitud"] += df[col].map(puntuacion_celda)
-    
-    # 4. ORDENAMIENTO CRÍTICO:
-    # Primero agrupamos por factura.
-    # Luego ponemos la FECHA MÁS NUEVA arriba (descendente).
-    # Luego la más completa arriba (descendente).
+            df["_comp"] += df[col].map(score)
+            
+    # 4. ORDENAMIENTO POR TIMESTAMP (El más grande es el más nuevo)
     df_ord = df.sort_values(
-        by=[COLUMNA_FACTURA, "_fecha_orden", "_completitud"],
-        ascending=[True, False, False], 
-        na_position="last"
+        by=[COLUMNA_FACTURA, "_ts", "_comp"],
+        ascending=[True, False, False]
     )
     
-    # 5. Mantenemos el primero de cada grupo (el de fecha más reciente)
+    # 5. Eliminar duplicados manteniendo el primero (el de mayor timestamp)
     df_limpio     = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first")
     df_duplicados = df_ord[~df_ord.index.isin(df_limpio.index)]
     
-    # Limpiar columnas auxiliares
-    cols_aux = ["_fecha_orden", "_completitud"]
+    # Limpiar auxiliares
     for frame in [df_limpio, df_duplicados]:
-        frame.drop(columns=[c for c in cols_aux if c in frame.columns], inplace=True)
+        frame.drop(columns=[c for c in ["_ts", "_comp"] if c in frame.columns], inplace=True)
         
     return df_limpio.sort_index().reset_index(drop=True), df_duplicados.reset_index(drop=True)
 
