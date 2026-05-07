@@ -104,7 +104,7 @@ def extraer_contrato(nombre_archivo):
     return numeros[0] if numeros else os.path.splitext(nombre_archivo)[0]
 
 def limpiar_nombres_columnas(df):
-    df.columns = df.columns.str.strip().str.replace('\ufeff', '', regex=False)
+    df.columns = df.columns.str.strip().str.lower().str.replace('\ufeff', '', regex=False)
     return df
 
 def leer_archivo(ruta):
@@ -148,19 +148,30 @@ def guardar_excel(df, ruta, nombre_hoja):
             ws.column_dimensions[col[0].column_letter].width = ancho
 
 def separar_duplicados(df):
-    df["_fecha_orden"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=False)
+    # Normalizar columna de factura para asegurar detección de duplicados
+    df[COLUMNA_FACTURA] = df[COLUMNA_FACTURA].astype(str).str.strip().str.upper()
+    
+    # Intentar parsear fecha con dayfirst=True (común en formatos latinos)
+    df["_fecha_orden"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=True)
     df["_tiene_fecha"] = df["_fecha_orden"].notna().astype(int)
+    
     df["_tiene_contrato"] = df["numero_contrato"].astype(str).str.strip().str.upper().apply(
         lambda x: 0 if x in VALORES_SIN_CONTRATO else 1
     )
+    
+    # Ordenar: Factura (ASC), Tiene Contrato (DESC), Tiene Fecha (DESC), Fecha (DESC - más reciente primero)
     df_ord = df.sort_values(
         by=[COLUMNA_FACTURA, "_tiene_contrato", "_tiene_fecha", "_fecha_orden"],
         ascending=[True, False, False, False], na_position="last"
     )
+    
+    # Eliminar duplicados manteniendo el primero (el mejor según el orden anterior)
     df_limpio     = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first")
     df_duplicados = df_ord[~df_ord.index.isin(df_limpio.index)]
+    
     for frame in [df_limpio, df_duplicados]:
         frame.drop(columns=["_fecha_orden", "_tiene_fecha", "_tiene_contrato"], inplace=True)
+        
     return df_limpio.sort_index().reset_index(drop=True), df_duplicados.reset_index(drop=True)
 
 @app.route("/login", methods=["GET", "POST"])
@@ -264,6 +275,16 @@ def unificar():
     carpeta_duplicados = os.path.join(carpeta, "Duplicados")
     os.makedirs(carpeta_limpios, exist_ok=True)
     os.makedirs(carpeta_duplicados, exist_ok=True)
+    
+    # Limpiar carpetas antes de unificar para evitar archivos acumulados en el zip
+    for f in glob.glob(os.path.join(carpeta_limpios, "*.xlsx")): 
+        try: os.remove(f)
+        except: pass
+    for root, dirs, files in os.walk(carpeta_duplicados):
+        for f in files: 
+            try: os.remove(os.path.join(root, f))
+            except: pass
+
     try:
         df_unificado = unificar_archivos(archivos)
         filas_orig   = len(df_unificado)
@@ -280,7 +301,10 @@ def unificar():
         for ruta in archivos:
             if os.path.isfile(ruta): os.remove(ruta)
         return jsonify({"estado": "ok", "archivos_unificados": len(archivos), "filas_totales": filas_orig, "duplicados_eliminados": len(df_duplicados), "filas_resultado": len(df_limpio), "nombre_limpio": f"{nombre_base}.xlsx"})
-    except Exception as e: return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        import gc
+        gc.collect()
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/descargar", methods=["POST"])
 @login_required
