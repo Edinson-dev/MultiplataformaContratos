@@ -155,22 +155,35 @@ def separar_duplicados(df):
     df["_fecha_orden"] = pd.to_datetime(df[COLUMNA_FECHA], errors="coerce", dayfirst=True)
     df["_tiene_fecha"] = df["_fecha_orden"].notna().astype(int)
     
+    # Evaluar si tiene contrato real
     df["_tiene_contrato"] = df["numero_contrato"].astype(str).str.strip().str.upper().apply(
         lambda x: 0 if x in VALORES_SIN_CONTRATO else 1
     )
     
-    # Ordenar: Factura (ASC), Tiene Contrato (DESC), Tiene Fecha (DESC), Fecha (DESC - más reciente primero)
+    # Calcular puntuación de completitud: cuántas columnas de datos NO están vacías
+    # Consideramos las columnas de la estructura final
+    cols_datos = [c for c in ESTRUCTURA_FINAL if c not in [COLUMNA_FACTURA, COLUMNA_FECHA]]
+    df["_completitud"] = df[cols_datos].apply(lambda x: x.notna().sum(), axis=1)
+    
+    # Ordenar priorizando:
+    # 1. El número de factura (para agrupar)
+    # 2. Si tiene fecha (preferimos registros con fecha válida)
+    # 3. La fecha más reciente (DESC - la más nueva arriba)
+    # 4. Mayor completitud de datos (DESC - la que tenga más info arriba)
+    # 5. Si tiene contrato real (DESC - 1 sobre 0)
     df_ord = df.sort_values(
-        by=[COLUMNA_FACTURA, "_tiene_contrato", "_tiene_fecha", "_fecha_orden"],
-        ascending=[True, False, False, False], na_position="last"
+        by=[COLUMNA_FACTURA, "_tiene_fecha", "_fecha_orden", "_completitud", "_tiene_contrato"],
+        ascending=[True, False, False, False, False], na_position="last"
     )
     
-    # Eliminar duplicados manteniendo el primero (el mejor según el orden anterior)
+    # Eliminar duplicados manteniendo el primero (el mejor según el criterio anterior)
     df_limpio     = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first")
     df_duplicados = df_ord[~df_ord.index.isin(df_limpio.index)]
     
+    # Limpiar columnas auxiliares
+    cols_aux = ["_fecha_orden", "_tiene_fecha", "_tiene_contrato", "_completitud"]
     for frame in [df_limpio, df_duplicados]:
-        frame.drop(columns=["_fecha_orden", "_tiene_fecha", "_tiene_contrato"], inplace=True)
+        frame.drop(columns=[c for c in cols_aux if c in frame.columns], inplace=True)
         
     return df_limpio.sort_index().reset_index(drop=True), df_duplicados.reset_index(drop=True)
 
