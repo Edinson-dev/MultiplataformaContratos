@@ -277,23 +277,82 @@ def listar_archivos():
     archivos = []
     for ext in EXTENSIONES:
         archivos.extend(glob.glob(os.path.join(carpeta, ext)))
-    archivos = [a for a in archivos if not a.endswith(".py") and "Sin Duplicados" not in a and "Duplicados" not in a]
+    archivos = [a for a in archivos if not a.endswith(".py") and "Sin Duplicados" not in os.path.basename(a) and "Duplicados" not in os.path.basename(a)]
     archivos_info = [{"nombre": os.path.basename(a), "ruta": a} for a in sorted(archivos)]
     return jsonify({"archivos": archivos_info, "carpeta": carpeta})
 
 @app.route("/api/subir", methods=["POST"])
 @login_required
 def subir_archivos():
+    import zipfile
+    try:
+        import rarfile
+    except ImportError:
+        rarfile = None
+
     carpeta  = carpeta_usuario(session["usuario"])
     archivos = request.files.getlist("archivos")
     if not archivos: return jsonify({"error": "No se recibieron archivos"}), 400
-    ext_validas = {".csv", ".txt", ".xlsx", ".xls", ".xlsm"}
+    
+    ext_validas = {".csv", ".txt", ".xlsx", ".xls", ".xlsm", ".zip", ".rar"}
+    ext_datos = {".csv", ".txt", ".xlsx", ".xls", ".xlsm"}
     guardados = []
+    
     for f in archivos:
         _, ext = os.path.splitext(f.filename)
-        if ext.lower() not in ext_validas: continue
-        f.save(os.path.join(carpeta, f.filename))
-        guardados.append(f.filename)
+        ext_lower = ext.lower()
+        if ext_lower not in ext_validas: continue
+        
+        if ext_lower == '.zip':
+            try:
+                import io
+                f.seek(0)
+                with zipfile.ZipFile(f.stream, 'r') as z:
+                    for file_name in z.namelist():
+                        _, c_ext = os.path.splitext(file_name)
+                        if c_ext.lower() in ext_datos:
+                            base_name = os.path.basename(file_name)
+                            if base_name:  # No es un directorio
+                                dest_path = os.path.join(carpeta, base_name)
+                                with z.open(file_name) as source, open(dest_path, 'wb') as target:
+                                    target.write(source.read())
+                                guardados.append(base_name)
+            except Exception as e:
+                return jsonify({"error": f"Error extrayendo ZIP: {str(e)}"}), 400
+                
+        elif ext_lower == '.rar':
+            if rarfile:
+                if platform.system() == "Windows":
+                    posibles_rutas = [
+                        r"C:\Program Files\WinRAR\UnRAR.exe",
+                        r"C:\Program Files (x86)\WinRAR\UnRAR.exe"
+                    ]
+                    for ruta in posibles_rutas:
+                        if os.path.exists(ruta):
+                            rarfile.UNRAR_TOOL = ruta
+                            break
+                try:
+                    with rarfile.RarFile(f, 'r') as r:
+                        for file_name in r.namelist():
+                            _, c_ext = os.path.splitext(file_name)
+                            if c_ext.lower() in ext_datos:
+                                base_name = os.path.basename(file_name)
+                                if base_name:
+                                    dest_path = os.path.join(carpeta, base_name)
+                                    with r.open(file_name) as source, open(dest_path, 'wb') as target:
+                                        target.write(source.read())
+                                    guardados.append(base_name)
+                except Exception as e:
+                    return jsonify({"error": f"Error extrayendo RAR: {str(e)}\nProbablemente WinRAR no está en C:\\Program Files\\WinRAR"}), 400
+            else:
+                return jsonify({"error": "La libreria rarfile no está instalada (ejecuta pip install rarfile)"}), 400
+        else:
+            f.save(os.path.join(carpeta, f.filename))
+            guardados.append(f.filename)
+            
+    if not guardados:
+        return jsonify({"error": "El archivo comprimido estaba vacío o no contenía Excels/CSVs"}), 400
+
     return jsonify({"ok": True, "guardados": guardados, "total": len(guardados)})
 
 @app.route("/api/procesar", methods=["POST"])
