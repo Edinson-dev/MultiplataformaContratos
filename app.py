@@ -277,7 +277,7 @@ def listar_archivos():
     archivos = []
     for ext in EXTENSIONES:
         archivos.extend(glob.glob(os.path.join(carpeta, ext)))
-    archivos = [a for a in archivos if not a.endswith(".py") and "Sin Duplicados" not in a and "Duplicados" not in a]
+    archivos = [a for a in archivos if not a.endswith(".py") and "Sin Duplicados" not in os.path.basename(a) and "Duplicados" not in os.path.basename(a)]
     archivos_info = [{"nombre": os.path.basename(a), "ruta": a} for a in sorted(archivos)]
     return jsonify({"archivos": archivos_info, "carpeta": carpeta})
 
@@ -305,7 +305,9 @@ def subir_archivos():
         
         if ext_lower == '.zip':
             try:
-                with zipfile.ZipFile(f, 'r') as z:
+                import io
+                f.seek(0)
+                with zipfile.ZipFile(f.stream, 'r') as z:
                     for file_name in z.namelist():
                         _, c_ext = os.path.splitext(file_name)
                         if c_ext.lower() in ext_datos:
@@ -316,10 +318,19 @@ def subir_archivos():
                                     target.write(source.read())
                                 guardados.append(base_name)
             except Exception as e:
-                print(f"Error extrayendo ZIP: {e}")
+                return jsonify({"error": f"Error extrayendo ZIP: {str(e)}"}), 400
                 
         elif ext_lower == '.rar':
             if rarfile:
+                if platform.system() == "Windows":
+                    posibles_rutas = [
+                        r"C:\Program Files\WinRAR\UnRAR.exe",
+                        r"C:\Program Files (x86)\WinRAR\UnRAR.exe"
+                    ]
+                    for ruta in posibles_rutas:
+                        if os.path.exists(ruta):
+                            rarfile.UNRAR_TOOL = ruta
+                            break
                 try:
                     with rarfile.RarFile(f, 'r') as r:
                         for file_name in r.namelist():
@@ -332,13 +343,16 @@ def subir_archivos():
                                         target.write(source.read())
                                     guardados.append(base_name)
                 except Exception as e:
-                    print(f"Error extrayendo RAR: {e}")
+                    return jsonify({"error": f"Error extrayendo RAR: {str(e)}\nProbablemente WinRAR no está en C:\\Program Files\\WinRAR"}), 400
             else:
-                print("Libreria rarfile no esta instalada o configurada.")
+                return jsonify({"error": "La libreria rarfile no está instalada (ejecuta pip install rarfile)"}), 400
         else:
             f.save(os.path.join(carpeta, f.filename))
             guardados.append(f.filename)
             
+    if not guardados:
+        return jsonify({"error": "El archivo comprimido estaba vacío o no contenía Excels/CSVs"}), 400
+
     return jsonify({"ok": True, "guardados": guardados, "total": len(guardados)})
 
 @app.route("/api/procesar", methods=["POST"])
