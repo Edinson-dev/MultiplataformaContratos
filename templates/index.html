@@ -503,21 +503,22 @@ async function unificar(){
     pg.classList.remove('show');
     const el=((Date.now()-t0)/1000).toFixed(1);
 
-    if(data.error){
-      toast('❌ '+data.error,'error',6000);
-      document.getElementById('rc').innerHTML=`<div class="rc err"><div class="err-box">❌ ${data.error}</div></div>`;
+    if(data.error || data.estado !== 'ok'){
+      const errMsg = data.error || data.message || data.error_description || JSON.stringify(data) || 'Error desconocido o Timeout del servidor';
+      toast('❌ Error en el proceso','error',6000);
+      document.getElementById('rc').innerHTML=`<div class="rc err"><div class="err-box">❌ ${errMsg}</div></div>`;
     } else {
       renderUnificado(data);
       animN(document.getElementById('s-p'),ses.p,ses.p+1);
-      animN(document.getElementById('s-d'),ses.d,ses.d+data.duplicados_eliminados);
-      animN(document.getElementById('s-f'),ses.f,ses.f+data.filas_resultado);
+      animN(document.getElementById('s-d'),ses.d,ses.d+(data.duplicados_eliminados||0));
+      animN(document.getElementById('s-f'),ses.f,ses.f+(data.filas_resultado||0));
       document.getElementById('s-t').textContent=el+'s';
-      ses.p+=1; ses.d+=data.duplicados_eliminados; ses.f+=data.filas_resultado;
-      hist.unshift({n:'Unificado ('+data.archivos_unificados+' archivos)',d:data.duplicados_eliminados,f:data.filas_resultado,t:new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',second:'2-digit'})});
+      ses.p+=1; ses.d+=(data.duplicados_eliminados||0); ses.f+=(data.filas_resultado||0);
+      hist.unshift({n:'Unificado ('+(data.archivos_unificados||0)+' archivos)',d:(data.duplicados_eliminados||0),f:(data.filas_resultado||0),t:new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',second:'2-digit'})});
       renderHist();
       listarArchivos();
       setStep(4);
-      toast('✅ '+data.archivos_unificados+' archivos unificados · '+data.duplicados_eliminados.toLocaleString()+' duplicados eliminados','success',5000);
+      toast('✅ '+(data.archivos_unificados||0)+' archivos unificados · '+(data.duplicados_eliminados||0).toLocaleString()+' duplicados eliminados','success',5000);
     }
   }catch(e){
     pg.classList.remove('show');
@@ -614,10 +615,15 @@ function renderCruce(data){
 
 function renderUnificado(data){
   let h='';
+  const unif = data.archivos_unificados || 0;
+  const dup = data.duplicados_eliminados || 0;
+  const res = data.filas_resultado || 0;
+  const tot = data.filas_totales || 0;
+  
   h+=`<div class="dl-banner">
     <div class="dl-banner-txt">
       <div class="dl-title">🔗 ¡Archivos unificados!</div>
-      <div class="dl-sub">${data.archivos_unificados} archivos fusionados · ${data.duplicados_eliminados.toLocaleString()} duplicados eliminados</div>
+      <div class="dl-sub">${unif} archivos fusionados · ${dup.toLocaleString()} duplicados eliminados</div>
     </div>
     <div class="dl-btns" style="flex-wrap:wrap;gap:6px;">
       <button class="btn btn-purple btn-sm" onclick="descargarZip('limpios')">⬇️ ZIP Unificado limpio</button>
@@ -626,18 +632,18 @@ function renderUnificado(data){
   </div>`;
 
   h+=`<div class="met-row">
-    <div class="mc purple" style="animation-delay:0s"><div class="mc-ico">📁</div><div class="mc-v purple">${data.archivos_unificados}</div><div class="mc-l">Archivos unidos</div></div>
-    <div class="mc red" style="animation-delay:.07s"><div class="mc-ico">🗑️</div><div class="mc-v red">${data.duplicados_eliminados.toLocaleString()}</div><div class="mc-l">Duplicados</div></div>
-    <div class="mc green" style="animation-delay:.14s"><div class="mc-ico">✅</div><div class="mc-v green">${data.filas_resultado.toLocaleString()}</div><div class="mc-l">Filas finales</div></div>
+    <div class="mc purple" style="animation-delay:0s"><div class="mc-ico">📁</div><div class="mc-v purple">${unif}</div><div class="mc-l">Archivos unidos</div></div>
+    <div class="mc red" style="animation-delay:.07s"><div class="mc-ico">🗑️</div><div class="mc-v red">${dup.toLocaleString()}</div><div class="mc-l">Duplicados</div></div>
+    <div class="mc green" style="animation-delay:.14s"><div class="mc-ico">✅</div><div class="mc-v green">${res.toLocaleString()}</div><div class="mc-l">Filas finales</div></div>
   </div>`;
 
   h+=`<div class="rc ok">
     <div class="rc-hd"><div class="rc-ico ok">🔗</div><div class="rc-name">Archivo unificado generado</div></div>
-    <span class="unif-badge">🔗 ${data.archivos_unificados} archivos fusionados</span>
+    <span class="unif-badge">🔗 ${unif} archivos fusionados</span>
     <div class="rc-stats">
-      <div class="rs"><div class="rs-v b">${data.filas_totales.toLocaleString()}</div><div class="rs-l">Filas totales</div></div>
-      <div class="rs"><div class="rs-v r">${data.duplicados_eliminados.toLocaleString()}</div><div class="rs-l">Duplicados</div></div>
-      <div class="rs"><div class="rs-v g">${data.filas_resultado.toLocaleString()}</div><div class="rs-l">Resultado</div></div>
+      <div class="rs"><div class="rs-v b">${tot.toLocaleString()}</div><div class="rs-l">Filas totales</div></div>
+      <div class="rs"><div class="rs-v r">${dup.toLocaleString()}</div><div class="rs-l">Duplicados</div></div>
+      <div class="rs"><div class="rs-v g">${res.toLocaleString()}</div><div class="rs-l">Resultado</div></div>
     </div>
     ${data.nombre_dup?'<div class="rc-path dup">🗑️ Duplicados guardados separadamente</div>':'<div class="rc-path" style="color:#10b981;background:#f0fdf4;border-color:#bbf7d0">✅ Sin duplicados encontrados</div>'}
   </div>`;
