@@ -195,20 +195,29 @@ def separar_duplicados(df):
         
         if fechas_encontradas:
             # IMPORTANTE: Devolvemos la fecha más RECIENTE encontrada en esta fila
-            # Esto garantiza que si hay rastros de 2024/2025, esta fila se considere "más vigente"
             return max(fechas_encontradas)
         return pd.NaT
 
     df["_dt_final"] = df.apply(parse_fecha_inteligente, axis=1)
-    # Convertir a timestamp para ordenamiento numérico fácil
     df["_ts"] = df["_dt_final"].apply(lambda x: x.timestamp() if pd.notnull(x) else -1.0)
     
-    # 3. Score de Completitud (priorizar filas con más datos útiles)
+    # 3. PRIORIDAD DE CONTRATO (NUEVO)
+    # Priorizar filas que tengan un número de contrato válido sobre las que dicen "SIN CONTRATO", "0", etc.
+    def tiene_contrato_valido(val):
+        if pd.isna(val): return 0
+        s = str(val).strip().upper()
+        if s in VALORES_SIN_CONTRATO: return 0
+        # Si tiene al menos un carácter alfanumérico y no está en la lista de descartes
+        return 1 if any(c.isalnum() for c in s) else 0
+
+    df["_has_contract"] = df["numero_contrato"].apply(tiene_contrato_valido)
+
+    # 4. Score de Completitud (priorizar filas con más datos útiles)
     cols_datos = [c for c in ESTRUCTURA_FINAL if c not in [COLUMNA_FACTURA, COLUMNA_FECHA]]
     def score(val):
         if pd.isna(val): return 0
         s = str(val).strip().upper()
-        if s in ["0", "0.0", "", "NONE", "NAN", "N/A", "NA", "0,0", "NULL"]: return 0
+        if s in ["0", "0.0", "", "NONE", "NAN", "N/A", "NA", "0,0", "NULL"] or s in VALORES_SIN_CONTRATO: return 0
         return 1
     
     df["_comp"] = 0
@@ -216,16 +225,22 @@ def separar_duplicados(df):
         if col in df.columns:
             df["_comp"] += df[col].map(score)
             
-    # 4. ORDENAMIENTO CRÍTICO:
-    # Primero por factura, luego por fecha DESCENDENTE (más reciente arriba), luego por completitud
-    df_ord = df.sort_values(by=[COLUMNA_FACTURA, "_ts", "_comp"], ascending=[True, False, False])
+    # 5. ORDENAMIENTO CRÍTICO:
+    # 1. Factura
+    # 2. ¿Tiene contrato? (1 primero, 0 después)
+    # 3. Fecha más reciente (desc)
+    # 4. Completitud (desc)
+    df_ord = df.sort_values(
+        by=[COLUMNA_FACTURA, "_has_contract", "_ts", "_comp"], 
+        ascending=[True, False, False, False]
+    )
     
-    # 5. Mantener el primero (el más reciente y completo)
+    # 6. Mantener el primero (el mejor postor)
     df_limpio     = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first").copy()
     df_duplicados = df_ord[~df_ord.index.isin(df_limpio.index)].copy()
     
     # Limpieza de columnas auxiliares
-    cols_aux = ["_dt_final", "_ts", "_comp"]
+    cols_aux = ["_dt_final", "_ts", "_has_contract", "_comp"]
     for frame in [df_limpio, df_duplicados]:
         cols_existentes = [c for c in cols_aux if c in frame.columns]
         if cols_existentes:
@@ -361,7 +376,7 @@ def unificar():
             if os.path.isfile(ruta): os.remove(ruta)
         return jsonify({
             "estado": "ok", 
-            "version": "2.0_debug_dates",
+            "version": "1.3_contract_priority",
             "archivos_unificados": len(archivos), 
             "filas_totales": filas_orig, 
             "duplicados_eliminados": len(df_duplicados), 
