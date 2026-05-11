@@ -284,16 +284,61 @@ def listar_archivos():
 @app.route("/api/subir", methods=["POST"])
 @login_required
 def subir_archivos():
+    import zipfile
+    try:
+        import rarfile
+    except ImportError:
+        rarfile = None
+
     carpeta  = carpeta_usuario(session["usuario"])
     archivos = request.files.getlist("archivos")
     if not archivos: return jsonify({"error": "No se recibieron archivos"}), 400
-    ext_validas = {".csv", ".txt", ".xlsx", ".xls", ".xlsm"}
+    
+    ext_validas = {".csv", ".txt", ".xlsx", ".xls", ".xlsm", ".zip", ".rar"}
+    ext_datos = {".csv", ".txt", ".xlsx", ".xls", ".xlsm"}
     guardados = []
+    
     for f in archivos:
         _, ext = os.path.splitext(f.filename)
-        if ext.lower() not in ext_validas: continue
-        f.save(os.path.join(carpeta, f.filename))
-        guardados.append(f.filename)
+        ext_lower = ext.lower()
+        if ext_lower not in ext_validas: continue
+        
+        if ext_lower == '.zip':
+            try:
+                with zipfile.ZipFile(f, 'r') as z:
+                    for file_name in z.namelist():
+                        _, c_ext = os.path.splitext(file_name)
+                        if c_ext.lower() in ext_datos:
+                            base_name = os.path.basename(file_name)
+                            if base_name:  # No es un directorio
+                                dest_path = os.path.join(carpeta, base_name)
+                                with z.open(file_name) as source, open(dest_path, 'wb') as target:
+                                    target.write(source.read())
+                                guardados.append(base_name)
+            except Exception as e:
+                print(f"Error extrayendo ZIP: {e}")
+                
+        elif ext_lower == '.rar':
+            if rarfile:
+                try:
+                    with rarfile.RarFile(f, 'r') as r:
+                        for file_name in r.namelist():
+                            _, c_ext = os.path.splitext(file_name)
+                            if c_ext.lower() in ext_datos:
+                                base_name = os.path.basename(file_name)
+                                if base_name:
+                                    dest_path = os.path.join(carpeta, base_name)
+                                    with r.open(file_name) as source, open(dest_path, 'wb') as target:
+                                        target.write(source.read())
+                                    guardados.append(base_name)
+                except Exception as e:
+                    print(f"Error extrayendo RAR: {e}")
+            else:
+                print("Libreria rarfile no esta instalada o configurada.")
+        else:
+            f.save(os.path.join(carpeta, f.filename))
+            guardados.append(f.filename)
+            
     return jsonify({"ok": True, "guardados": guardados, "total": len(guardados)})
 
 @app.route("/api/procesar", methods=["POST"])

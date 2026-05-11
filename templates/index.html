@@ -83,6 +83,8 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
 .dz-fmt.csv{background:#d1fae5;color:#065f46}
 .dz-fmt.xlsx{background:#dbeafe;color:#1e40af}
 .dz-fmt.txt{background:#f1f5f9;color:#64748b}
+.dz-fmt.zip{background:#fef3c7;color:#b45309}
+.dz-fmt.rar{background:#e0e7ff;color:#4338ca}
 
 /* ── FIELDS ── */
 .field-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:6px;display:flex;align-items:center;gap:5px}
@@ -300,9 +302,11 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
           <span class="dz-fmt xlsx">XLSX</span>
           <span class="dz-fmt xlsx">XLS</span>
           <span class="dz-fmt txt">TXT</span>
+          <span class="dz-fmt zip">ZIP</span>
+          <span class="dz-fmt rar">RAR</span>
         </div>
       </div>
-      <input type="file" id="file-input" multiple accept=".csv,.xlsx,.xls,.txt,.xlsm" style="display:none" onchange="filesFromInput(event)">
+      <input type="file" id="file-input" multiple accept=".csv,.xlsx,.xls,.txt,.xlsm,.zip,.rar" style="display:none" onchange="filesFromInput(event)">
 
       <div class="sep"></div>
 
@@ -420,7 +424,7 @@ function filesFromInput(e){
   e.target.value='';
 }
 async function processDroppedFiles(dropped){
-  const exts=['.csv','.xlsx','.xls','.txt','.xlsm'];
+  const exts=['.csv','.xlsx','.xls','.txt','.xlsm','.zip','.rar'];
   const valid=dropped.filter(f=>exts.some(e=>f.name.toLowerCase().endsWith(e)));
   if(!valid.length){toast('No se encontraron archivos válidos','error',4000);return;}
   const dz=document.getElementById('drop-zone');
@@ -436,7 +440,7 @@ async function processDroppedFiles(dropped){
   }catch(ex){toast('Error de conexión','error');resetDZ();}
 }
 function resetDZ(){
-  document.getElementById('drop-zone').innerHTML=`<span class="dz-icon">📂</span><div class="dz-title">Arrastra archivos aquí</div><div class="dz-sub">o <b onclick="event.stopPropagation();document.getElementById('file-input').click()">selecciona desde tu equipo</b></div><div class="dz-formats"><span class="dz-fmt csv">CSV</span><span class="dz-fmt xlsx">XLSX</span><span class="dz-fmt xlsx">XLS</span><span class="dz-fmt txt">TXT</span></div>`;
+  document.getElementById('drop-zone').innerHTML=`<span class="dz-icon">📂</span><div class="dz-title">Arrastra archivos aquí</div><div class="dz-sub">o <b onclick="event.stopPropagation();document.getElementById('file-input').click()">selecciona desde tu equipo</b></div><div class="dz-formats"><span class="dz-fmt csv">CSV</span><span class="dz-fmt xlsx">XLSX</span><span class="dz-fmt xlsx">XLS</span><span class="dz-fmt txt">TXT</span><span class="dz-fmt zip">ZIP</span><span class="dz-fmt rar">RAR</span></div>`;
 }
 
 // ── Modo: duplicados o unificar ──

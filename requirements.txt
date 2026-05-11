@@ -4,3 +4,4 @@ openpyxl==3.1.4
 werkzeug==3.0.3
 gunicorn==22.0.0
 xlrd==2.0.1
+rarfile>=4.0
