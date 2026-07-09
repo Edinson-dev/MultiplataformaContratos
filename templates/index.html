@@ -504,8 +504,10 @@ async function unificar(){
 
   const t0=Date.now();
   const regimen = document.getElementById('select-regimen').value;
+  const fechaInicio = document.getElementById('fecha-inicio').value;
+  const fechaFin = document.getElementById('fecha-fin').value;
   try{
-    const res = await fetch('/api/unificar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivos:s, regimen: regimen})});
+    const res = await fetch('/api/unificar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivos:s, regimen: regimen, fecha_inicio: fechaInicio, fecha_fin: fechaFin})});
     const data = await res.json();
     phase(85,'done','done','on'); await w(500);
     phase(100,'done','done','done'); await w(600);
@@ -560,9 +562,11 @@ async function cruzar(){
 
   const t0=Date.now();
   const regimen = document.getElementById('select-regimen').value;
+  const fechaInicio = document.getElementById('fecha-inicio').value;
+  const fechaFin = document.getElementById('fecha-fin').value;
   try{
     const res = await fetch('/api/cruzar',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({archivos:s, contrato, incluir_sin_contrato: incluirSinContrato, regimen: regimen})});
+      body:JSON.stringify({archivos:s, contrato, incluir_sin_contrato: incluirSinContrato, regimen: regimen, fecha_inicio: fechaInicio, fecha_fin: fechaFin})});
     const data = await res.json();
     phase(85,'done','done','on'); await w(500);
     phase(100,'done','done','done'); await w(600);
@@ -735,8 +739,10 @@ async function procesar(){
 
   const t0=Date.now();
   const regimen = document.getElementById('select-regimen').value;
+  const fechaInicio = document.getElementById('fecha-inicio').value;
+  const fechaFin = document.getElementById('fecha-fin').value;
   try{
-    const res=await fetch('/api/procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivos:s, regimen: regimen})});
+    const res=await fetch('/api/procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivos:s, regimen: regimen, fecha_inicio: fechaInicio, fecha_fin: fechaFin})});
     const data=await res.json();
     phase(85,'done','done','on');await w(500);
     phase(100,'done','done','done');await w(700);

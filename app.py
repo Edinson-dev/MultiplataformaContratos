@@ -65,6 +65,45 @@ def aplicar_filtro_regimen(df, regimen):
         return df[df["mae_regimen_valor"].astype(str).str.strip().str.upper() == regimen]
     return df
 
+def aplicar_filtro_fechas(df, fecha_inicio, fecha_fin):
+    if not fecha_inicio and not fecha_fin:
+        return df
+    
+    col = None
+    if "fecha_prestacion" in df.columns:
+        col = "fecha_prestacion"
+    elif "fecha_de_prestacion" in df.columns:
+        col = "fecha_de_prestacion"
+        
+    if not col:
+        return df
+        
+    try:
+        # Convertir a datetime la columna
+        fechas_dt = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
+        # Por si el formato es americano
+        fechas_dt = fechas_dt.fillna(pd.to_datetime(df[col], dayfirst=False, errors="coerce"))
+        
+        mask = pd.Series(True, index=df.index)
+        
+        if fecha_inicio:
+            dt_inicio = pd.to_datetime(fecha_inicio)
+            mask = mask & (fechas_dt >= dt_inicio)
+            
+        if fecha_fin:
+            # Añadimos 23:59:59 al final del día
+            dt_fin = pd.to_datetime(fecha_fin) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            mask = mask & (fechas_dt <= dt_fin)
+            
+        # Para que no pierda las filas donde no hay fecha, podríamos decidir conservarlas o borrarlas.
+        # Por seguridad, si no tiene fecha y estamos filtrando, mejor descartamos. Si queremos conservarlas:
+        # mask = mask | fechas_dt.isna()
+        
+        return df[mask].copy()
+    except Exception as e:
+        print("Error filtrando fechas:", e)
+        return df
+
 def normalizar_columnas(df):
     df = df.rename(columns=MAPEO_COLUMNAS)
     cols_ignorar = [c for c in df.columns if c in COLUMNAS_IGNORAR]
@@ -382,6 +421,7 @@ def procesar():
             df = leer_archivo(ruta_archivo)
             df = limpiar_nombres_columnas(df)
             df = aplicar_filtro_regimen(df, data.get("regimen", "TODOS"))
+            df = aplicar_filtro_fechas(df, data.get("fecha_inicio"), data.get("fecha_fin"))
             filas_orig = len(df)
             if COLUMNA_FACTURA not in df.columns or COLUMNA_FECHA not in df.columns:
                 resultados.append({"archivo": nombre_archivo, "estado": "error", "mensaje": "Faltan columnas"})
@@ -427,6 +467,7 @@ def unificar():
     try:
         df_unificado = unificar_archivos(archivos)
         df_unificado = aplicar_filtro_regimen(df_unificado, data.get("regimen", "TODOS"))
+        df_unificado = aplicar_filtro_fechas(df_unificado, data.get("fecha_inicio"), data.get("fecha_fin"))
         filas_orig   = len(df_unificado)
         df_limpio, df_duplicados = separar_duplicados(df_unificado)
         nombre_base = f"unificado_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
