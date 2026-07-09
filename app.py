@@ -45,7 +45,7 @@ ESTRUCTURA_FINAL = [
     "valor_pendiente", "valor_pagado_factura", "valor_copago",
     "valor_aceptado_ips", "valor_pagado_eps", "mae_tipo_contrato_valor",
     "fecha_radicacion", "fecha_proceso_radicacion",
-    "fecha_prestacion", "estado_factura"
+    "fecha_prestacion", "estado_factura", "mae_regimen_valor"
 ]
 
 MAPEO_COLUMNAS = {

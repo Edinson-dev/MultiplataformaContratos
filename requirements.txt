@@ -1,7 +1,0 @@
-Flask
-pandas
-openpyxl
-werkzeug
-rarfile>=4.0
-python-dotenv
-gunicorn
