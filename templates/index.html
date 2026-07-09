@@ -299,6 +299,17 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
         </select>
       </div>
 
+      <div id="date-field" style="margin-bottom:12px; display:flex; gap:8px;">
+        <div style="flex:1;">
+          <div class="field-lbl">📅 Fecha Inicio</div>
+          <input type="date" id="fecha-inicio" style="width:100%;background:#f0faf8;border:1.5px solid #b2e8e0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1a4a5c;outline:none;font-family:'Inter',sans-serif">
+        </div>
+        <div style="flex:1;">
+          <div class="field-lbl">📅 Fecha Fin</div>
+          <input type="date" id="fecha-fin" style="width:100%;background:#f0faf8;border:1.5px solid #b2e8e0;border-radius:7px;padding:6px 8px;font-size:12px;color:#1a4a5c;outline:none;font-family:'Inter',sans-serif">
+        </div>
+      </div>
+
       <div class="drop-zone" id="drop-zone"
            ondragover="dragOver(event)" ondragleave="dragLeave(event)"
            ondrop="dropFiles(event)" onclick="document.getElementById('file-input').click()">
