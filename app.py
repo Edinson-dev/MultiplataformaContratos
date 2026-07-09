@@ -220,21 +220,8 @@ def leer_archivo(ruta):
 
 def guardar_excel(df, ruta, nombre_hoja):
     nombre_hoja = nombre_hoja[:31]
-    df_copy = df.copy()
-    
-    # Formatear todas las columnas que contengan 'fecha' a DD/MM/YYYY
-    for col in df_copy.columns:
-        if 'fecha' in str(col).lower():
-            try:
-                # Convertimos temporalmente a datetime para extraer el formato limpio
-                dt_col = pd.to_datetime(df_copy[col], errors='coerce')
-                # Aplicamos formato DD/MM/YYYY y dejamos el original si falló
-                df_copy[col] = dt_col.dt.strftime('%d/%m/%Y').fillna(df_copy[col])
-            except:
-                pass
-                
     with pd.ExcelWriter(ruta, engine="openpyxl") as writer:
-        df_copy.to_excel(writer, sheet_name=nombre_hoja, index=False)
+        df.to_excel(writer, sheet_name=nombre_hoja, index=False)
         ws = writer.sheets[nombre_hoja]
         for col in ws.columns:
             valores = [str(c.value) if c.value is not None else "" for c in col[:6]]
