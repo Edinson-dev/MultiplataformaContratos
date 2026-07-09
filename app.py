@@ -89,29 +89,24 @@ def aplicar_filtro_fechas(df, fecha_inicio, fecha_fin, carpeta=None):
         return df
         
     try:
-        # 1. Parsear asumiendo Día/Mes/Año (Estándar Latino)
-        fechas_dt1 = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
-        # 2. Parsear asumiendo Mes/Día/Año (Estándar Americano)
-        fechas_dt2 = pd.to_datetime(df[col], dayfirst=False, errors="coerce")
+        # Convertir a datetime la columna
+        fechas_dt = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
+        # Por si el formato es americano
+        fechas_dt = fechas_dt.fillna(pd.to_datetime(df[col], dayfirst=False, errors="coerce"))
         
-        mask1 = pd.Series(True, index=df.index)
-        mask2 = pd.Series(True, index=df.index)
+        mask = pd.Series(True, index=df.index)
         
         if fecha_inicio:
             dt_inicio = pd.to_datetime(fecha_inicio)
-            mask1 = mask1 & (fechas_dt1 >= dt_inicio)
-            mask2 = mask2 & (fechas_dt2 >= dt_inicio)
+            mask = mask & (fechas_dt >= dt_inicio)
             
         if fecha_fin:
+            # Añadimos 23:59:59 al final del día
             dt_fin = pd.to_datetime(fecha_fin) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-            mask1 = mask1 & (fechas_dt1 <= dt_fin)
-            mask2 = mask2 & (fechas_dt2 <= dt_fin)
+            mask = mask & (fechas_dt <= dt_fin)
             
-        # Si la interpretación 1 (D/M/A) está en rango, o la interpretación 2 (M/D/A) está en rango, conservamos la factura.
-        mask_final = mask1 | mask2
-        
-        # IMPORTANTE: Conservar las facturas que tengan la celda de fecha vacía o irreconocible en ambos casos
-        mask_final = mask_final | (fechas_dt1.isna() & fechas_dt2.isna())
+        # IMPORTANTE: Conservar las facturas que tengan la celda de fecha vacía o no reconocible
+        mask_final = mask | fechas_dt.isna()
         
         df_descartado = df[~mask_final].copy()
         if carpeta and not df_descartado.empty:
