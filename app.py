@@ -65,7 +65,7 @@ def aplicar_filtro_regimen(df, regimen):
         return df[df["mae_regimen_valor"].astype(str).str.strip().str.upper() == regimen]
     return df
 
-def aplicar_filtro_fechas(df, fecha_inicio, fecha_fin):
+def aplicar_filtro_fechas(df, fecha_inicio, fecha_fin, carpeta=None):
     if not fecha_inicio and not fecha_fin:
         return df
     col = None
@@ -107,6 +107,20 @@ def aplicar_filtro_fechas(df, fecha_inicio, fecha_fin):
             
         # IMPORTANTE: Conservar las facturas que tengan la celda de fecha vacía o no reconocible
         mask = mask | fechas_dt.isna()
+        
+        df_descartado = df[~mask].copy()
+        if carpeta and not df_descartado.empty:
+            try:
+                import os
+                # Guardar en la carpeta de Duplicados para que se descargue en el ZIP
+                ruta_desc = os.path.join(carpeta, "Duplicados", "Descartados_por_fecha.xlsx")
+                os.makedirs(os.path.dirname(ruta_desc), exist_ok=True)
+                if os.path.exists(ruta_desc):
+                    df_prev = pd.read_excel(ruta_desc)
+                    df_descartado = pd.concat([df_prev, df_descartado], ignore_index=True)
+                df_descartado.to_excel(ruta_desc, index=False)
+            except:
+                pass
         
         return df[mask].copy()
     except Exception as e:
@@ -430,7 +444,7 @@ def procesar():
             df = leer_archivo(ruta_archivo)
             df = limpiar_nombres_columnas(df)
             df = aplicar_filtro_regimen(df, data.get("regimen", "TODOS"))
-            df = aplicar_filtro_fechas(df, data.get("fecha_inicio"), data.get("fecha_fin"))
+            df = aplicar_filtro_fechas(df, data.get("fecha_inicio"), data.get("fecha_fin"), carpeta)
             filas_orig = len(df)
             if COLUMNA_FACTURA not in df.columns or COLUMNA_FECHA not in df.columns:
                 resultados.append({"archivo": nombre_archivo, "estado": "error", "mensaje": "Faltan columnas"})
@@ -476,7 +490,7 @@ def unificar():
     try:
         df_unificado = unificar_archivos(archivos)
         df_unificado = aplicar_filtro_regimen(df_unificado, data.get("regimen", "TODOS"))
-        df_unificado = aplicar_filtro_fechas(df_unificado, data.get("fecha_inicio"), data.get("fecha_fin"))
+        df_unificado = aplicar_filtro_fechas(df_unificado, data.get("fecha_inicio"), data.get("fecha_fin"), carpeta)
         filas_orig   = len(df_unificado)
         df_limpio, df_duplicados = separar_duplicados(df_unificado)
         nombre_base = f"unificado_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
