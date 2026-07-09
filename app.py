@@ -89,26 +89,31 @@ def aplicar_filtro_fechas(df, fecha_inicio, fecha_fin, carpeta=None):
         return df
         
     try:
-        # Convertir a datetime la columna
-        fechas_dt = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
-        # Por si el formato es americano
-        fechas_dt = fechas_dt.fillna(pd.to_datetime(df[col], dayfirst=False, errors="coerce"))
+        # 1. Parsear asumiendo Día/Mes/Año (Estándar Latino)
+        fechas_dt1 = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
+        # 2. Parsear asumiendo Mes/Día/Año (Estándar Americano)
+        fechas_dt2 = pd.to_datetime(df[col], dayfirst=False, errors="coerce")
         
-        mask = pd.Series(True, index=df.index)
+        mask1 = pd.Series(True, index=df.index)
+        mask2 = pd.Series(True, index=df.index)
         
         if fecha_inicio:
             dt_inicio = pd.to_datetime(fecha_inicio)
-            mask = mask & (fechas_dt >= dt_inicio)
+            mask1 = mask1 & (fechas_dt1 >= dt_inicio)
+            mask2 = mask2 & (fechas_dt2 >= dt_inicio)
             
         if fecha_fin:
-            # Añadimos 23:59:59 al final del día
             dt_fin = pd.to_datetime(fecha_fin) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-            mask = mask & (fechas_dt <= dt_fin)
+            mask1 = mask1 & (fechas_dt1 <= dt_fin)
+            mask2 = mask2 & (fechas_dt2 <= dt_fin)
             
-        # IMPORTANTE: Conservar las facturas que tengan la celda de fecha vacía o no reconocible
-        mask = mask | fechas_dt.isna()
+        # Si la interpretación 1 (D/M/A) está en rango, o la interpretación 2 (M/D/A) está en rango, conservamos la factura.
+        mask_final = mask1 | mask2
         
-        df_descartado = df[~mask].copy()
+        # IMPORTANTE: Conservar las facturas que tengan la celda de fecha vacía o irreconocible en ambos casos
+        mask_final = mask_final | (fechas_dt1.isna() & fechas_dt2.isna())
+        
+        df_descartado = df[~mask_final].copy()
         if carpeta and not df_descartado.empty:
             try:
                 import os
@@ -122,7 +127,7 @@ def aplicar_filtro_fechas(df, fecha_inicio, fecha_fin, carpeta=None):
             except:
                 pass
         
-        return df[mask].copy()
+        return df[mask_final].copy()
     except Exception as e:
         print("Error filtrando fechas:", e)
         return df
@@ -215,8 +220,21 @@ def leer_archivo(ruta):
 
 def guardar_excel(df, ruta, nombre_hoja):
     nombre_hoja = nombre_hoja[:31]
+    df_copy = df.copy()
+    
+    # Formatear todas las columnas que contengan 'fecha' a DD/MM/YYYY
+    for col in df_copy.columns:
+        if 'fecha' in str(col).lower():
+            try:
+                # Convertimos temporalmente a datetime para extraer el formato limpio
+                dt_col = pd.to_datetime(df_copy[col], errors='coerce')
+                # Aplicamos formato DD/MM/YYYY y dejamos el original si falló
+                df_copy[col] = dt_col.dt.strftime('%d/%m/%Y').fillna(df_copy[col])
+            except:
+                pass
+                
     with pd.ExcelWriter(ruta, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name=nombre_hoja, index=False)
+        df_copy.to_excel(writer, sheet_name=nombre_hoja, index=False)
         ws = writer.sheets[nombre_hoja]
         for col in ws.columns:
             valores = [str(c.value) if c.value is not None else "" for c in col[:6]]
