@@ -290,6 +290,14 @@ body{font-family:'Inter',sans-serif;background:#f0f4f8;color:#1e293b;display:fle
           <span style="font-size:11px;color:#92400e;font-weight:600;line-height:1.4">Incluir facturas sin contrato <span style="font-weight:400;color:#b45309">(SIN CONTRATO, NA, VARIOS, 0)</span></span>
         </label>
       </div>
+      <div id="regimen-field" style="margin-bottom:12px">
+        <div class="field-lbl">🏥 Régimen (Filtro)</div>
+        <select id="select-regimen" style="width:100%;background:#f0faf8;border:1.5px solid #b2e8e0;border-radius:7px;padding:8px 10px;font-size:12px;color:#1a4a5c;outline:none;font-family:'Inter',sans-serif">
+          <option value="TODOS">Todos (Sin filtro)</option>
+          <option value="SUBSIDIADO">Solo Subsidiado</option>
+          <option value="CONTRIBUTIVO">Solo Contributivo</option>
+        </select>
+      </div>
 
       <div class="drop-zone" id="drop-zone"
            ondragover="dragOver(event)" ondragleave="dragLeave(event)"
@@ -495,8 +503,9 @@ async function unificar(){
   phase(50,'done','on',''); await w(500);
 
   const t0=Date.now();
+  const regimen = document.getElementById('select-regimen').value;
   try{
-    const res = await fetch('/api/unificar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivos:s})});
+    const res = await fetch('/api/unificar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivos:s, regimen: regimen})});
     const data = await res.json();
     phase(85,'done','done','on'); await w(500);
     phase(100,'done','done','done'); await w(600);
@@ -550,9 +559,10 @@ async function cruzar(){
   phase(50,'done','on',''); await w(500);
 
   const t0=Date.now();
+  const regimen = document.getElementById('select-regimen').value;
   try{
     const res = await fetch('/api/cruzar',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({archivos:s, contrato, incluir_sin_contrato: incluirSinContrato})});
+      body:JSON.stringify({archivos:s, contrato, incluir_sin_contrato: incluirSinContrato, regimen: regimen})});
     const data = await res.json();
     phase(85,'done','done','on'); await w(500);
     phase(100,'done','done','done'); await w(600);
@@ -724,8 +734,9 @@ async function procesar(){
   phase(45,'done','on','');await w(500);
 
   const t0=Date.now();
+  const regimen = document.getElementById('select-regimen').value;
   try{
-    const res=await fetch('/api/procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivos:s})});
+    const res=await fetch('/api/procesar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({archivos:s, regimen: regimen})});
     const data=await res.json();
     phase(85,'done','done','on');await w(500);
     phase(100,'done','done','done');await w(700);

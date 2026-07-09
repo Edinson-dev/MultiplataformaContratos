@@ -60,6 +60,11 @@ MAPEO_COLUMNAS = {
 
 COLUMNAS_IGNORAR = {"naturaleza_juridica"}
 
+def aplicar_filtro_regimen(df, regimen):
+    if regimen != "TODOS" and "mae_regimen_valor" in df.columns:
+        return df[df["mae_regimen_valor"].astype(str).str.strip().str.upper() == regimen]
+    return df
+
 def normalizar_columnas(df):
     df = df.rename(columns=MAPEO_COLUMNAS)
     cols_ignorar = [c for c in df.columns if c in COLUMNAS_IGNORAR]
@@ -376,6 +381,7 @@ def procesar():
         try:
             df = leer_archivo(ruta_archivo)
             df = limpiar_nombres_columnas(df)
+            df = aplicar_filtro_regimen(df, data.get("regimen", "TODOS"))
             filas_orig = len(df)
             if COLUMNA_FACTURA not in df.columns or COLUMNA_FECHA not in df.columns:
                 resultados.append({"archivo": nombre_archivo, "estado": "error", "mensaje": "Faltan columnas"})
@@ -420,6 +426,7 @@ def unificar():
 
     try:
         df_unificado = unificar_archivos(archivos)
+        df_unificado = aplicar_filtro_regimen(df_unificado, data.get("regimen", "TODOS"))
         filas_orig   = len(df_unificado)
         df_limpio, df_duplicados = separar_duplicados(df_unificado)
         nombre_base = f"unificado_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
