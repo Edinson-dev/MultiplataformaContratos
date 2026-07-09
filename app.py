@@ -105,9 +105,8 @@ def aplicar_filtro_fechas(df, fecha_inicio, fecha_fin):
             dt_fin = pd.to_datetime(fecha_fin) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
             mask = mask & (fechas_dt <= dt_fin)
             
-        # Para que no pierda las filas donde no hay fecha, podríamos decidir conservarlas o borrarlas.
-        # Por seguridad, si no tiene fecha y estamos filtrando, mejor descartamos. Si queremos conservarlas:
-        # mask = mask | fechas_dt.isna()
+        # IMPORTANTE: Conservar las facturas que tengan la celda de fecha vacía o no reconocible
+        mask = mask | fechas_dt.isna()
         
         return df[mask].copy()
     except Exception as e:
