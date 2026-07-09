@@ -68,13 +68,23 @@ def aplicar_filtro_regimen(df, regimen):
 def aplicar_filtro_fechas(df, fecha_inicio, fecha_fin):
     if not fecha_inicio and not fecha_fin:
         return df
-    
     col = None
-    if "fecha_prestacion" in df.columns:
-        col = "fecha_prestacion"
-    elif "fecha_de_prestacion" in df.columns:
-        col = "fecha_de_prestacion"
-        
+    posibles = ["fecha_prestacion", "fecha_de_prestacion", "fecha_prestacion_servicio", "fecha_prestacion_del_servicio"]
+    
+    # 1. Buscar coincidencia exacta
+    for c in posibles:
+        if c in df.columns:
+            col = c
+            break
+            
+    # 2. Buscar por coincidencia parcial si no se encontró
+    if not col:
+        for c in df.columns:
+            cstr = str(c).lower()
+            if 'fecha' in cstr and 'prestacion' in cstr:
+                col = c
+                break
+                
     if not col:
         return df
         
