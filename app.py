@@ -177,7 +177,7 @@ def extraer_contrato(nombre_archivo):
 
 def limpiar_nombres_columnas(df):
     # Limpieza profunda: minúsculas, sin espacios extra, reemplazar espacios por guiones bajos
-    df.columns = df.columns.str.strip().str.lower() \
+    df.columns = df.columns.astype(str).str.strip().str.lower() \
                            .str.replace(' ', '_', regex=False) \
                            .str.replace('.', '', regex=False) \
                            .str.replace('\ufeff', '', regex=False)
