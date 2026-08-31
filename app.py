@@ -217,102 +217,75 @@ def guardar_excel(df, ruta, nombre_hoja):
     nombre_hoja = nombre_hoja[:31]
     with pd.ExcelWriter(ruta, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name=nombre_hoja, index=False)
-        ws = writer.sheets[nombre_hoja]
-        for col in ws.columns:
-            valores = [str(c.value) if c.value is not None else "" for c in col[:6]]
-            ancho = min(max((len(v) for v in valores), default=10) + 4, 45)
-            ws.column_dimensions[col[0].column_letter].width = ancho
+        # Para datasets pequeños ajustamos anchos, para grandes omitimos la iteración celda a celda por rendimiento
+        if len(df) <= 5000:
+            ws = writer.sheets[nombre_hoja]
+            for col in ws.columns:
+                valores = [str(c.value) if c.value is not None else "" for c in col[:6]]
+                ancho = min(max((len(v) for v in valores), default=10) + 4, 45)
+                ws.column_dimensions[col[0].column_letter].width = ancho
 
 def separar_duplicados(df):
-    # 1. Normalización de Factura (más agresiva)
-    def clean_id(val):
-        if pd.isna(val): return "NAN"
-        s = str(val).strip().upper()
-        # Eliminar ceros a la izquierda para que '00123' y '123' sean iguales
-        s = s.lstrip('0')
-        # Eliminar .0 al final (común en Excel)
-        if s.endswith('.0'): s = s[:-2]
-        # Si después de limpiar queda vacío, era '0' o similar
-        if not s: return "0"
-        return s
-    
-    df[COLUMNA_FACTURA] = df[COLUMNA_FACTURA].apply(clean_id)
-    
-    # 2. Búsqueda de la fecha más reciente (VIGENTE) en toda la fila
-    def parse_fecha_inteligente(row):
-        fechas_encontradas = []
-        # Columnas preferentes
-        prioridad = [COLUMNA_FECHA, "fecha_radicacion", "fecha_proceso_radicacion"]
-        # Otras posibles columnas de fecha
-        otras_cols = [c for c in row.index if 'fecha' in str(c).lower() and c not in prioridad]
-        
-        for col in (prioridad + otras_cols):
-            val = row.get(col)
-            if pd.notnull(val) and str(val).strip() != "":
-                try:
-                    # Intentar parsear con día primero (estándar ES)
-                    dt = pd.to_datetime(val, dayfirst=True, errors='coerce')
-                    if pd.isna(dt):
-                        # Intentar formato flexible si el anterior falló
-                        dt = pd.to_datetime(val, dayfirst=False, errors='coerce')
-                    
-                    if pd.notnull(dt):
-                        fechas_encontradas.append(dt)
-                except: continue
-        
-        if fechas_encontradas:
-            # IMPORTANTE: Devolvemos la fecha más RECIENTE encontrada en esta fila
-            return max(fechas_encontradas)
-        return pd.NaT
+    # 1. Normalización de Factura (vectorizada)
+    fact_str = df[COLUMNA_FACTURA].astype(str).str.strip().str.upper()
+    fact_str = fact_str.str.lstrip('0')
+    fact_str = fact_str.str.replace(r'\.0$', '', regex=True)
+    fact_str = fact_str.replace(['', 'NAN', 'NONE', 'N/A', 'NA'], '0')
+    df[COLUMNA_FACTURA] = fact_str
 
-    df["_dt_final"] = df.apply(parse_fecha_inteligente, axis=1)
-    df["_ts"] = df["_dt_final"].apply(lambda x: x.timestamp() if pd.notnull(x) else -1.0)
-    
-    # 3. PRIORIDAD DE CONTRATO (NUEVO)
-    # Priorizar filas que tengan un número de contrato válido sobre las que dicen "SIN CONTRATO", "0", etc.
-    def tiene_contrato_valido(val):
-        if pd.isna(val): return 0
-        s = str(val).strip().upper()
-        if s in VALORES_SIN_CONTRATO: return 0
-        # Si tiene al menos un carácter alfanumérico y no está en la lista de descartes
-        return 1 if any(c.isalnum() for c in s) else 0
+    # 2. Parseo inteligente de fechas vectorizado
+    cols_fecha = [c for c in [COLUMNA_FECHA, "fecha_radicacion", "fecha_proceso_radicacion"] if c in df.columns]
+    cols_fecha += [c for c in df.columns if 'fecha' in str(c).lower() and c not in cols_fecha]
 
-    df["_has_contract"] = df["numero_contrato"].apply(tiene_contrato_valido)
+    dt_series_list = []
+    for col in cols_fecha:
+        dt = pd.to_datetime(df[col], dayfirst=True, errors='coerce')
+        if dt.isna().any():
+            dt = dt.fillna(pd.to_datetime(df[col], dayfirst=False, errors='coerce'))
+        dt_series_list.append(dt)
 
-    # 4. Score de Completitud (priorizar filas con más datos útiles)
+    if dt_series_list:
+        dt_concat = pd.concat(dt_series_list, axis=1)
+        df["_dt_final"] = dt_concat.max(axis=1)
+    else:
+        df["_dt_final"] = pd.NaT
+
+    df["_ts"] = df["_dt_final"].apply(lambda x: x.timestamp() if pd.notnull(x) and not pd.isna(x) else -1.0)
+
+    # 3. PRIORIDAD DE CONTRATO (Vectorizado)
+    contrato_str = df["numero_contrato"].astype(str).str.strip().str.upper()
+    sin_contrato_mask = contrato_str.isin(VALORES_SIN_CONTRATO) | contrato_str.isna()
+    tiene_alnum = contrato_str.str.contains(r'[A-Za-z0-9]', regex=True, na=False)
+    df["_has_contract"] = (~sin_contrato_mask & tiene_alnum).astype(int)
+
+    # 4. Score de Completitud (Vectorizado)
     cols_datos = [c for c in ESTRUCTURA_FINAL if c not in [COLUMNA_FACTURA, COLUMNA_FECHA]]
-    def score(val):
-        if pd.isna(val): return 0
-        s = str(val).strip().upper()
-        if s in ["0", "0.0", "", "NONE", "NAN", "N/A", "NA", "0,0", "NULL"] or s in VALORES_SIN_CONTRATO: return 0
-        return 1
-    
     df["_comp"] = 0
+    descartes_comp = {"0", "0.0", "", "NONE", "NAN", "N/A", "NA", "0,0", "NULL"}.union(VALORES_SIN_CONTRATO)
+    
     for col in cols_datos:
         if col in df.columns:
-            df["_comp"] += df[col].map(score)
-            
+            val_str = df[col].astype(str).str.strip().str.upper()
+            valido = ~df[col].isna() & ~val_str.isin(descartes_comp)
+            df["_comp"] += valido.astype(int)
+
     # 5. ORDENAMIENTO CRÍTICO:
-    # 1. Factura
-    # 2. ¿Tiene contrato? (1 primero, 0 después)
-    # 3. Fecha más reciente (desc)
-    # 4. Completitud (desc)
     df_ord = df.sort_values(
         by=[COLUMNA_FACTURA, "_has_contract", "_ts", "_comp"], 
         ascending=[True, False, False, False]
     )
-    
-    # 6. Mantener el primero (el mejor postor)
-    df_limpio     = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first").copy()
+
+    # 6. Mantener el primero
+    df_limpio = df_ord.drop_duplicates(subset=[COLUMNA_FACTURA], keep="first").copy()
     df_duplicados = df_ord[~df_ord.index.isin(df_limpio.index)].copy()
-    
+
     # Limpieza de columnas auxiliares
     cols_aux = ["_dt_final", "_ts", "_has_contract", "_comp"]
     for frame in [df_limpio, df_duplicados]:
         cols_existentes = [c for c in cols_aux if c in frame.columns]
         if cols_existentes:
             frame.drop(columns=cols_existentes, inplace=True)
-        
+
     return df_limpio.reset_index(drop=True), df_duplicados.reset_index(drop=True)
 
 @app.route("/login", methods=["GET", "POST"])
